@@ -1,0 +1,5 @@
+package com.example.donora_plus
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
