@@ -75,8 +75,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
         actions: [
           _NotificationBell(),
-          const SizedBox(width: 8),
-          _RoleSwitch(),
           const SizedBox(width: 12),
         ],
       ),
@@ -150,77 +148,4 @@ class _NotificationBell extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Role switch (compact pill toggle in AppBar)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _RoleSwitch extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeRole = ref.watch(activeRoleProvider);
-    final colors = context.colors;
-    final isSeeker = activeRole == 'seeker';
-
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: colors.card,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: colors.border, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _RolePill(
-            label: 'Seeker',
-            isActive: isSeeker,
-            onTap: () =>
-                ref.read(activeRoleProvider.notifier).state = 'seeker',
-          ),
-          _RolePill(
-            label: 'Donor',
-            isActive: !isSeeker,
-            onTap: () =>
-                ref.read(activeRoleProvider.notifier).state = 'donor',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RolePill extends StatelessWidget {
-  const _RolePill({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? colors.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: context.textTheme.labelMedium?.copyWith(
-            color: isActive ? colors.primary : colors.textMedium,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
+// (Role switch moved to Profile & Settings screen)

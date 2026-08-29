@@ -185,45 +185,55 @@ class _WelcomePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: colors.secondaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.smart_toy_outlined,
-                size: 36,
-                color: colors.secondary,
+    // Scrollable + centered: stays centered when there's room, but scrolls
+    // instead of overflowing when vertical space is tight (small screens,
+    // keyboard open).
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: colors.secondaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.smart_toy_outlined,
+                      size: 36,
+                      color: colors.secondary,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Donora Assistant',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textHigh,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Ask me about blood donation, eligibility,\nverification, or finding donors near you.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colors.textMedium,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Donora Assistant',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: colors.textHigh,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Ask me about blood donation, eligibility,\nverification, or finding donors near you.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: colors.textMedium,
-                height: 1.5,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -463,7 +473,7 @@ class _ChatbotInputBar extends StatelessWidget {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(12, 8, 12, 8 + bottomPadding),
+      padding: EdgeInsets.fromLTRB(12, 8, 12, 8 + bottomPadding + 80),
       decoration: BoxDecoration(
         color: colors.card,
         border: Border(

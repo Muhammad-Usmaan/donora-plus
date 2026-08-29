@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/router/route_names.dart';
+import '../../../services/providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import '../../../services/supabase/storage_service_provider.dart';
 import '../../home/providers/home_providers.dart';
@@ -20,6 +21,15 @@ class LogoutAction {
   final Ref _ref;
 
   Future<void> call() async {
+    // Stop targeting this device with push notifications before the
+    // session goes away (the profile id is needed for the cleanup).
+    final userId = _ref.read(currentUserProvider)?.id;
+    try {
+      await _ref.read(fcmServiceProvider).clearToken(userId: userId);
+    } catch (_) {
+      // Push cleanup is best-effort — never block sign-out.
+    }
+
     try {
       final authService = _ref.read(authServiceProvider);
       await authService.signOut();
@@ -29,7 +39,7 @@ class LogoutAction {
     // Navigate to auth — the router redirect guard handles this
     // automatically once currentUser is null, but we go explicitly.
     final router = _ref.read(routerProvider);
-    router.go(RouteNames.auth);
+    router.go(RoutePaths.auth);
   }
 }
 
@@ -66,7 +76,7 @@ class DeleteAccountAction {
       await authService.signOut();
 
       final router = _ref.read(routerProvider);
-      router.go(RouteNames.auth);
+      router.go(RoutePaths.auth);
       return true;
     } catch (_) {
       return false;
@@ -216,3 +226,20 @@ class UploadProfilePhotoAction {
     return publicUrl;
   }
 }
+
+// ── Requested count ───────────────────────────────────────────────────────
+
+/// Number of blood requests the current user has created (all statuses).
+/// Backs the "Requested" stat tile on the profile screen — the counters
+/// were relocated here from the removed Requests bottom-nav tab.
+final myRequestCountProvider = FutureProvider<int>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return 0;
+
+  final client = ref.watch(supabaseClientProvider);
+  final data = await client
+      .from('blood_requests')
+      .select('id')
+      .eq('requester_id', user.id);
+  return data.length;
+});

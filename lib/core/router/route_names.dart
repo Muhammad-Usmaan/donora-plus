@@ -29,6 +29,7 @@ class RouteNames {
   static const String notifications = 'notifications';
   static const String profile = 'profile';
   static const String locationPicker = 'location-picker';
+  static const String helpFaq = 'help-faq';
 }
 
 /// Route path segments (used inside GoRoute definitions).
@@ -52,4 +53,5 @@ class RoutePaths {
   static const String notifications = '/notifications';
   static const String profile = '/profile';
   static const String locationPicker = '/location-picker';
+  static const String helpFaq = '/help-faq';
 }

@@ -128,7 +128,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: c.surface,
+      scaffoldBackgroundColor: const Color(0xFFF7F7F9),
       textTheme: textTheme,
 
       // ── AppBar ──────────────────────────────────────────────────────
@@ -148,15 +148,15 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: c.primary,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 48),
+          minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(999),
           ),
-          textStyle: textTheme.labelLarge,
+          textStyle: textTheme.labelLarge!.copyWith(fontWeight: FontWeight.w700),
           elevation: 0,
           shadowColor: Colors.transparent,
           surfaceTintColor: Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         ),
       ),
 
@@ -201,8 +201,7 @@ class AppTheme {
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: c.border, width: 1),
+          borderRadius: BorderRadius.circular(20),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -309,6 +308,16 @@ class AppTheme {
         color: c.border,
         thickness: 1,
         space: 1,
+      ),
+
+      // ── SegmentedButton ────────────────────────────────────────────
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          ),
+          visualDensity: VisualDensity.compact,
+        ),
       ),
 
       // ── Progress ───────────────────────────────────────────────────

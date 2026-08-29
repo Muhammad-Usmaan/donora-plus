@@ -7,11 +7,16 @@ import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/donor_status_chip.dart';
+import '../../../core/widgets/stat_tile.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../home/providers/home_providers.dart';
 import '../providers/profile_providers.dart';
+import '../widgets/donation_history_sheet.dart';
+import '../widgets/notification_settings_sheet.dart';
+import '../widgets/profile_dialogs.dart';
 
 /// Profile & Settings screen for Donora+.
 ///
@@ -92,21 +97,43 @@ class _ProfileBody extends ConsumerWidget {
       profile.activeRole == 'donor' ||
       profile.donorClassification.isNotEmpty;
 
-  /// Builds a compact subtitle for the Phone / Email row.
-  String? _contactSubtitle(UserProfile p) {
-    final parts = <String>[];
-    if (p.phone != null && p.phone!.isNotEmpty) parts.add(p.phone!);
-    if (p.email != null && p.email!.isNotEmpty) parts.add(p.email!);
-    return parts.isEmpty ? null : parts.join(' · ');
+  /// Subtitle for the Phone Number row.
+  String? _phoneSubtitle(UserProfile p) {
+    if (p.phone == null || p.phone!.isEmpty) {
+      return 'Not set — tap to add';
+    }
+    return p.phone;
+  }
+
+  /// Email is fixed for security — explain instead of allowing edits.
+  void _showEmailInfoDialog(BuildContext context) {
+    showAppDialog(
+      context: context,
+      title: 'Email Address',
+      message: 'For security reasons, your email address can\'t be '
+          'changed. It is used to sign in to Donora+.',
+      icon: Icons.alternate_email,
+      iconColor: context.colors.secondary,
+      actions: [
+        DialogActionButton(
+          label: 'Got It',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       children: [
         // ── Header ─────────────────────────────────────────────
         _ProfileHeader(profile: profile),
+        const SizedBox(height: 24),
+
+        // ── Stats: Blood Type / Donated / Requested ──────────
+        _StatsRow(profile: profile),
         const SizedBox(height: 24),
 
         // ── Account ────────────────────────────────────────────
@@ -119,20 +146,41 @@ class _ProfileBody extends ConsumerWidget {
               _SettingsRow(
                 icon: Icons.person_outline,
                 label: 'Edit Profile',
-                onTap: () => _showEditProfileDialog(context, ref),
+                onTap: () => showEditNameDialog(
+                  context,
+                  ref: ref,
+                  currentName: profile.name,
+                ),
               ),
               const Divider(height: 1),
               _SettingsRow(
                 icon: Icons.lock_outline,
                 label: 'Change Password',
-                onTap: () => _showChangePasswordDialog(context, ref),
+                onTap: () => showChangePasswordDialog(context, ref: ref),
+              ),
+              const Divider(height: 1),
+              _SettingsRow(
+                icon: Icons.phone_outlined,
+                label: 'Phone Number',
+                subtitle: _phoneSubtitle(profile),
+                onTap: () => showEditPhoneDialog(
+                  context,
+                  ref: ref,
+                  currentPhone: profile.phone,
+                ),
               ),
               const Divider(height: 1),
               _SettingsRow(
                 icon: Icons.alternate_email,
-                label: 'Phone / Email',
-                subtitle: _contactSubtitle(profile),
-                onTap: () => _showContactDialog(context, ref),
+                label: 'Email',
+                subtitle: profile.email,
+                showChevron: false,
+                trailing: Icon(
+                  Icons.lock_outline,
+                  size: 16,
+                  color: context.colors.textMedium,
+                ),
+                onTap: () => _showEmailInfoDialog(context),
               ),
             ],
           ),
@@ -161,7 +209,7 @@ class _ProfileBody extends ConsumerWidget {
                 _SettingsRow(
                   icon: Icons.history,
                   label: 'Donation History',
-                  onTap: () => _showDonationHistory(context),
+                  onTap: () => showDonationHistorySheet(context),
                 ),
                 const Divider(height: 1),
                 _ClassificationToggleRow(
@@ -187,14 +235,18 @@ class _ProfileBody extends ConsumerWidget {
               _SettingsRow(
                 icon: Icons.notifications_outlined,
                 label: 'Notifications',
-                onTap: () => _showNotificationsComingSoon(context),
+                onTap: () => showNotificationSettingsSheet(context),
               ),
               const Divider(height: 1),
               _SettingsRow(
                 icon: Icons.location_city,
                 label: 'City / Location',
                 subtitle: profile.city.isNotEmpty ? profile.city : null,
-                onTap: () => _showCityDialog(context, ref),
+                onTap: () => showCityDialog(
+                  context,
+                  ref: ref,
+                  currentCity: profile.city,
+                ),
               ),
               const Divider(height: 1),
               _RoleSwitcherRow(currentRole: profile.activeRole),
@@ -213,13 +265,13 @@ class _ProfileBody extends ConsumerWidget {
               _SettingsRow(
                 icon: Icons.help_outline,
                 label: 'Help & FAQ',
-                onTap: () => _showHelpComingSoon(context),
+                onTap: () => context.pushNamed(RouteNames.helpFaq),
               ),
               const Divider(height: 1),
               _SettingsRow(
                 icon: Icons.support_agent,
                 label: 'Contact Support',
-                onTap: () => _showContactSupport(context),
+                onTap: () => showContactSupportDialog(context),
               ),
               const Divider(height: 1),
               _SettingsRow(
@@ -249,134 +301,7 @@ class _ProfileBody extends ConsumerWidget {
     );
   }
 
-  // ── Dialogs & bottom sheets ──────────────────────────────────────────────────
-
-  void _showEditProfileDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController(text: profile.name);
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Name'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          maxLength: 60,
-          decoration: const InputDecoration(
-            labelText: 'Full Name',
-            hintText: 'Enter your name',
-            counterText: '',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final newName = controller.text.trim();
-              if (newName.length < 2) return;
-              Navigator.of(ctx).pop();
-              try {
-                await ref
-                    .read(updateProfileFieldProvider)({'name': newName});
-                if (context.mounted) {
-                  context.showSnackBar('Name updated');
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  context.showSnackBar('Update failed: $e', isError: true);
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showContactDialog(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
-    final phoneCtrl = TextEditingController(text: profile.phone ?? '');
-    final emailCtrl = TextEditingController(text: profile.email ?? '');
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Phone / Email'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                hintText: '+92XXXXXXXXXX',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                hintText: 'you@example.com',
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Phone must be in +92XXXXXXXXXX format.',
-              style: TextStyle(fontSize: 11, color: colors.textMedium),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              // Normalize phone to satisfy the DB CHECK constraint.
-              final rawPhone = phoneCtrl.text.trim();
-              final String? phone = rawPhone.isEmpty
-                  ? null
-                  : normalizePhone(rawPhone);
-              if (rawPhone.isNotEmpty && phone == null) {
-                if (context.mounted) {
-                  context.showSnackBar(
-                    'Invalid phone format. Use +92XXXXXXXXXX.',
-                    isError: true,
-                  );
-                }
-                return;
-              }
-              final email = emailCtrl.text.trim();
-              try {
-                await ref.read(updateProfileFieldProvider)({
-                  'phone': phone ?? '',
-                  'email': email.isEmpty ? '' : email,
-                });
-                if (context.mounted) {
-                  context.showSnackBar('Contact info updated');
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  context.showSnackBar('Update failed: $e', isError: true);
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
+  // ── Dialogs & bottom sheets ────────────────────────────────────────────────
 
   void _showBloodTypePicker(BuildContext context, WidgetRef ref) {
     final bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -385,24 +310,44 @@ class _ProfileBody extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 'Select Blood Type',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: colors.textHigh,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
+              Text(
+                'Your blood type helps match you with requests.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colors.textMedium,
+                ),
+              ),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
@@ -459,153 +404,6 @@ class _ProfileBody extends ConsumerWidget {
     );
   }
 
-  void _showDonationHistory(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Donation history — coming soon'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _showNotificationsComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Notification settings — coming soon'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _showCityDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController(text: profile.city);
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('City / Location'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: 'City',
-            hintText: 'Enter your city',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final city = controller.text.trim();
-              Navigator.of(ctx).pop();
-              try {
-                await ref.read(updateProfileFieldProvider)({'city': city});
-                if (context.mounted) {
-                  context.showSnackBar('City updated');
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  context.showSnackBar('Update failed: $e', isError: true);
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
-    final newPwCtrl = TextEditingController();
-    final confirmPwCtrl = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Password'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: newPwCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'New Password',
-                hintText: 'Minimum 6 characters',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmPwCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Confirm Password',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              try {
-                await ref.read(changePasswordActionProvider)(
-                  newPwCtrl.text,
-                  confirmPwCtrl.text,
-                );
-                if (context.mounted) {
-                  context.showSnackBar('Password updated successfully');
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  context.showSnackBar('$e', isError: true);
-                }
-              }
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showHelpComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Help & FAQ — coming soon'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _showContactSupport(BuildContext context) {
-    // url_launcher is not wired yet; show a copy-able address in the meantime.
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Contact Support'),
-        content: const SelectableText(
-          'Send us an email at:\nsupport@donora.app',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showAboutDialog(BuildContext context) {
     showAboutDialog(
       context: context,
@@ -657,18 +455,50 @@ class _ProfileHeaderState extends ConsumerState<_ProfileHeader> {
     showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         final colors = context.colors;
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Drag handle
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.border,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Change Profile Photo',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textHigh,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 ListTile(
-                  leading: Icon(Icons.photo_library, color: colors.primary),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.photo_library,
+                        size: 20, color: colors.primary),
+                  ),
                   title: const Text('Choose from Gallery'),
                   onTap: () {
                     Navigator.of(ctx).pop();
@@ -676,7 +506,17 @@ class _ProfileHeaderState extends ConsumerState<_ProfileHeader> {
                   },
                 ),
                 ListTile(
-                  leading: Icon(Icons.camera_alt, color: colors.primary),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.secondaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.camera_alt,
+                        size: 20, color: colors.secondary),
+                  ),
                   title: const Text('Take a Photo'),
                   onTap: () {
                     Navigator.of(ctx).pop();
@@ -828,6 +668,49 @@ class _LargeProfileAvatar extends StatelessWidget {
   }
 }
 
+// ── Stats row ───────────────────────────────────────────────────────────
+
+/// Blood Type / Donated / Requested counters — relocated here from the
+/// removed Requests bottom-nav tab (design spec §4.2).
+class _StatsRow extends ConsumerWidget {
+  const _StatsRow({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requestCount = ref
+        .watch(myRequestCountProvider)
+        .whenOrNull(data: (count) => '$count');
+
+    return Row(
+      children: [
+        Expanded(
+          child: StatTile(
+            value: profile.bloodGroup.isNotEmpty ? profile.bloodGroup : '—',
+            caption: 'Blood Type',
+            valueColor: context.colors.primary,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: StatTile(
+            value: '${profile.totalDonations}',
+            caption: 'Donated',
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: StatTile(
+            value: requestCount ?? '—',
+            caption: 'Requested',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Section title ─────────────────────────────────────────────────────────────
 
 class _SectionTitle extends StatelessWidget {
@@ -859,6 +742,7 @@ class _SettingsRow extends StatelessWidget {
     required this.onTap,
     this.subtitle,
     this.trailing,
+    this.showChevron = true,
   });
 
   final IconData icon;
@@ -866,6 +750,9 @@ class _SettingsRow extends StatelessWidget {
   final VoidCallback onTap;
   final String? subtitle;
   final Widget? trailing;
+
+  /// Whether to show the navigation chevron (hide for info-only rows).
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
@@ -908,11 +795,12 @@ class _SettingsRow extends StatelessWidget {
               trailing!,
               const SizedBox(width: 8),
             ],
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: colors.textMedium,
-            ),
+            if (showChevron)
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: colors.textMedium,
+              ),
           ],
         ),
       ),
@@ -1086,7 +974,7 @@ class _VerificationStatusRow extends StatelessWidget {
   }
 }
 
-// ── Role switcher row ─────────────────────────────────────────────────────────
+// ── Role switcher row (SegmentedButton) ──────────────────────────────────────
 
 class _RoleSwitcherRow extends ConsumerWidget {
   const _RoleSwitcherRow({required this.currentRole});
@@ -1097,7 +985,6 @@ class _RoleSwitcherRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final activeRole = ref.watch(activeRoleProvider);
-    final isSeeker = activeRole == 'seeker';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1107,7 +994,7 @@ class _RoleSwitcherRow extends ConsumerWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'Active Role',
+              'Account Role',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
@@ -1115,34 +1002,18 @@ class _RoleSwitcherRow extends ConsumerWidget {
               ),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: colors.border, width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ToggleOption(
-                  label: 'Seeker',
-                  selected: isSeeker,
-                  onTap: () {
-                    ref
-                        .read(switchRoleActionProvider)
-                        ('seeker');
-                  },
-                ),
-                _ToggleOption(
-                  label: 'Donor',
-                  selected: !isSeeker,
-                  onTap: () {
-                    ref
-                        .read(switchRoleActionProvider)
-                        ('donor');
-                  },
-                ),
-              ],
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'seeker', label: Text('Seeker')),
+              ButtonSegment(value: 'donor', label: Text('Donor')),
+            ],
+            selected: {activeRole},
+            onSelectionChanged: (selected) {
+              ref.read(switchRoleActionProvider)(selected.first);
+            },
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
         ],
@@ -1215,30 +1086,17 @@ class _DeleteAccountRow extends ConsumerWidget {
   }
 
   void _showDeleteDialog(BuildContext context, WidgetRef ref) {
-    showDialog<bool>(
+    showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete your account?'),
-        content: const Text(
-          'This action is permanent and cannot be undone. '
-          'All your data, including requests and messages, will be deleted.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: context.colors.urgent,
-            ),
-            child: const Text('Delete Account'),
-          ),
-        ],
-      ),
+      title: 'Delete your account?',
+      message:
+          'This action is permanent and cannot be undone. All your data, '
+          'including requests and messages, will be deleted.',
+      confirmLabel: 'Delete Account',
+      icon: Icons.delete_outline,
+      destructive: true,
     ).then((confirmed) async {
-      if (confirmed == true) {
+      if (confirmed) {
         final success =
             await ref.read(deleteAccountActionProvider)();
         if (context.mounted && !success) {

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/request_reasons.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/widgets/blood_type_chip.dart';
@@ -16,7 +18,8 @@ import '../providers/request_create_provider.dart';
 /// "Request Blood" full-screen form.
 ///
 /// Reached via the UrgentButton on the seeker home screen.
-/// Fields: blood type, urgency, city, hospital, units, notes, contact pref.
+/// Fields: blood type, urgency, reason, city, hospital, units, notes,
+/// contact pref.
 /// On submit: shows success state with "View Request" button.
 class RequestCreateScreen extends ConsumerStatefulWidget {
   const RequestCreateScreen({super.key});
@@ -29,6 +32,7 @@ class RequestCreateScreen extends ConsumerStatefulWidget {
 class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   final _hospitalController = TextEditingController();
   final _notesController = TextEditingController();
+  final _reasonNoteController = TextEditingController();
   final _scrollController = ScrollController();
 
   @override
@@ -56,6 +60,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   void dispose() {
     _hospitalController.dispose();
     _notesController.dispose();
+    _reasonNoteController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -115,6 +120,46 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                         .read(requestCreateProvider.notifier)
                         .setUrgent(v),
                   ),
+                  const SizedBox(height: 24),
+
+                  // ── Reason for request (required) ──
+                  const _SectionLabel(
+                      label: 'Reason for Request', required: true),
+                  const SizedBox(height: 12),
+                  _ReasonChipSelect(
+                    selected: formState.reason,
+                    onChanged: (reason) => ref
+                        .read(requestCreateProvider.notifier)
+                        .setReason(reason),
+                  ),
+                  if (formState.reason == RequestReason.other) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _reasonNoteController,
+                      onChanged: (v) => ref
+                          .read(requestCreateProvider.notifier)
+                          .setReasonNote(v),
+                      maxLength: 60,
+                      decoration: InputDecoration(
+                        hintText: 'Briefly tell donors why (optional)',
+                        filled: true,
+                        fillColor: colors.card,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: colors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: colors.primary, width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   // ── City / location ──────────────────────────────
@@ -346,6 +391,96 @@ class _BloodTypeGrid extends StatelessWidget {
           onTap: () => onTap(type),
         );
       }).toList(),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Reason chip select (wrap of selectable reason pills)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ReasonChipSelect extends StatelessWidget {
+  const _ReasonChipSelect({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final RequestReason? selected;
+  final ValueChanged<RequestReason> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final reason in RequestReason.values)
+          _ReasonChip(
+            reason: reason,
+            isSelected: reason == selected,
+            onTap: () => onChanged(reason),
+          ),
+      ],
+    );
+  }
+}
+
+class _ReasonChip extends StatelessWidget {
+  const _ReasonChip({
+    required this.reason,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final RequestReason reason;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final accent = reason.accent(colors);
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? accent.withValues(alpha: 0.12)
+              : colors.card,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected
+                ? accent.withValues(alpha: 0.5)
+                : colors.border,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhosphorIcon(
+              reason.icon,
+              size: 14,
+              color: isSelected ? accent : colors.textMedium,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              reason.label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? accent : colors.textMedium,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

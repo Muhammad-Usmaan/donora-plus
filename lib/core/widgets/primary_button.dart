@@ -3,7 +3,7 @@ import '../utils/extensions.dart';
 
 /// Filled primary action button.
 ///
-/// Primary color fill, white text, 12px radius, 48px height, full-width.
+/// Primary color fill, white text, 48px height, full-width.
 /// Used for main CTAs like "Sign In", "Submit Request".
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
@@ -12,12 +12,16 @@ class PrimaryButton extends StatelessWidget {
     required this.onPressed,
     this.isLoading = false,
     this.icon,
+    this.radius = 12,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool isLoading;
   final IconData? icon;
+
+  /// Corner radius — 12px by default, 16px for onboarding-style pill CTAs.
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +34,7 @@ class PrimaryButton extends StatelessWidget {
           backgroundColor: context.colors.primary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(radius),
           ),
           elevation: 0,
           shadowColor: Colors.transparent,

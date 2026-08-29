@@ -378,7 +378,7 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SuccessBanner(
+          const _SuccessBanner(
             message: 'Account created! Check your email to confirm your account, then log in.',
           ),
           const SizedBox(height: 24),

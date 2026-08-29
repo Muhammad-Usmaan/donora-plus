@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,6 +20,7 @@ import '../../features/chat/screens/conversation_screen.dart';
 import '../../features/chatbot/screens/chatbot_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/help_faq_screen.dart';
 import '../../features/requests/screens/location_picker_screen.dart';
 import '../widgets/main_shell.dart';
 
@@ -31,8 +31,6 @@ final GlobalKey<NavigatorState> _mapNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'map');
 final GlobalKey<NavigatorState> _chatNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'chat');
-final GlobalKey<NavigatorState> _chatbotNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'chatbot');
 final GlobalKey<NavigatorState> _profileNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'profile');
 final GlobalKey<NavigatorState> _rootNavigatorKey =
@@ -46,7 +44,7 @@ final GlobalKey<NavigatorState> _rootNavigatorKey =
 /// Notifier that triggers GoRouter redirect re-evaluation on auth state changes.
 class _AuthRefreshNotifier extends ChangeNotifier {
   _AuthRefreshNotifier(this._ref) {
-    _ref.listen(authStateProvider, (_, __) => notifyListeners());
+    _ref.listen(authStateProvider, (_, _) => notifyListeners());
   }
 
   final Ref _ref;
@@ -133,17 +131,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Chatbot tab
-          StatefulShellBranch(
-            navigatorKey: _chatbotNavigatorKey,
-            routes: [
-              GoRoute(
-                name: RouteNames.chatbot,
-                path: RoutePaths.chatbot,
-                builder: (_, _) => const ChatbotScreen(),
-              ),
-            ],
-          ),
           // Profile tab
           StatefulShellBranch(
             navigatorKey: _profileNavigatorKey,
@@ -163,6 +150,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: RouteNames.verification,
         path: RoutePaths.verification,
         builder: (_, _) => const VerificationScreen(),
+      ),
+      // AI assistant — full-screen route; the Home "Ask Donora AI"
+      // card is its single entry point (not a bottom-nav tab).
+      GoRoute(
+        name: RouteNames.chatbot,
+        path: RoutePaths.chatbot,
+        builder: (_, _) => const ChatbotScreen(),
       ),
       GoRoute(
         name: RouteNames.requests,
@@ -197,6 +191,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: RouteNames.notifications,
         path: RoutePaths.notifications,
         builder: (_, _) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        name: RouteNames.helpFaq,
+        path: RoutePaths.helpFaq,
+        builder: (_, _) => const HelpFaqScreen(),
       ),
       GoRoute(
         name: RouteNames.locationPicker,

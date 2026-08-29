@@ -9,8 +9,9 @@ import '../../../services/supabase/supabase_client_provider.dart';
 /// Full public-facing donor profile.
 ///
 /// Privacy note: CNIC images and raw verification documents are admin-only
-/// and NEVER included in this model. Only fields approved for public display
-/// are exposed.
+/// and NEVER included in this model. Phone/email are part of the
+/// RLS-readable profiles row and only back the masked contact line and
+/// Call Now action on the seeker-facing profile screen.
 class DonorProfile {
   const DonorProfile({
     required this.id,
@@ -20,11 +21,14 @@ class DonorProfile {
     required this.isVerified,
     required this.isTopDonor,
     required this.donorClassification,
+    required this.activeRole,
     this.profilePhotoUrl,
     this.bio,
     this.totalDonations,
     this.lastDonationDate,
     this.showLastDonationDate = false,
+    this.phone,
+    this.email,
   });
 
   final String id;
@@ -34,6 +38,9 @@ class DonorProfile {
   final bool isVerified;
   final bool isTopDonor;
   final String donorClassification;
+
+  /// Current app mode: 'donor' or 'seeker'.
+  final String activeRole;
   final String? profilePhotoUrl;
   final String? bio;
   final int? totalDonations;
@@ -41,6 +48,22 @@ class DonorProfile {
 
   /// Whether the donor has opted to make last donation date public.
   final bool showLastDonationDate;
+
+  /// Raw contact fields. Phone backs the masked contact line and the
+  /// Call Now action; email is shown when no phone is on file.
+  final String? phone;
+  final String? email;
+
+  /// Whether this donor can plausibly donate right now: they must be in
+  /// donor mode, and — when their last donation date is public — at least
+  /// 90 days must have passed since it.
+  bool get isAvailableToDonate {
+    if (activeRole != 'donor') return false;
+    if (!showLastDonationDate) return true;
+    final last = lastDonationDate;
+    if (last == null) return true;
+    return DateTime.now().difference(last).inDays >= 90;
+  }
 
   factory DonorProfile.fromMap(Map<String, dynamic> map) => DonorProfile(
         id: map['id'] as String? ?? '',
@@ -51,6 +74,7 @@ class DonorProfile {
         isTopDonor: map['is_top_donor'] as bool? ?? false,
         donorClassification:
             map['donor_classification'] as String? ?? 'volunteer',
+        activeRole: map['active_role'] as String? ?? 'donor',
         profilePhotoUrl: map['profile_photo_url'] as String?,
         bio: map['bio'] as String?,
         totalDonations: map['total_donations'] as int?,
@@ -59,6 +83,8 @@ class DonorProfile {
             : null,
         showLastDonationDate:
             map['show_last_donation_date'] as bool? ?? false,
+        phone: map['phone'] as String?,
+        email: map['email'] as String?,
       );
 }
 
@@ -121,5 +147,25 @@ final donorResponseToViewerProvider =
     return null;
   } catch (_) {
     return null;
+  }
+});
+
+/// Number of blood requests this donor has responded to.
+///
+/// request_responses is RLS-restricted (donors see only their own rows,
+/// seekers only responses to their own requests), so the count comes from
+/// the `donor_response_count` SECURITY DEFINER aggregate. Falls back to 0
+/// when the function is unavailable (e.g. migration not yet applied).
+final donorResponseCountProvider =
+    FutureProvider.family<int, String>((ref, donorId) async {
+  final client = ref.watch(supabaseClientProvider);
+  try {
+    final result = await client.rpc(
+      'donor_response_count',
+      params: {'p_donor_id': donorId},
+    );
+    return (result as num?)?.toInt() ?? 0;
+  } catch (_) {
+    return 0;
   }
 });

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/constants/request_reasons.dart';
 import '../../../core/providers/auth_providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import '../../home/providers/home_providers.dart';
@@ -12,6 +13,8 @@ class RequestFormState {
   const RequestFormState({
     this.bloodGroup,
     this.isUrgent = true,
+    this.reason,
+    this.reasonNote = '',
     this.city,
     this.latitude,
     this.longitude,
@@ -29,6 +32,12 @@ class RequestFormState {
 
   /// True = urgent (within hours), false = planned (within days).
   final bool isUrgent;
+
+  /// Why blood is needed (required) — must be chosen explicitly.
+  final RequestReason? reason;
+
+  /// Free-text note when [reason] is [RequestReason.other] (max 60 chars).
+  final String reasonNote;
 
   /// City / location (auto-filled from profile, editable).
   final String? city;
@@ -64,6 +73,7 @@ class RequestFormState {
   bool get isValid =>
       bloodGroup != null &&
       bloodGroup!.isNotEmpty &&
+      reason != null &&
       city != null &&
       city!.isNotEmpty &&
       hospitalName.trim().isNotEmpty &&
@@ -76,6 +86,8 @@ class RequestFormState {
   RequestFormState copyWith({
     String? bloodGroup,
     bool? isUrgent,
+    RequestReason? reason,
+    String? reasonNote,
     String? city,
     double? latitude,
     double? longitude,
@@ -91,6 +103,8 @@ class RequestFormState {
     return RequestFormState(
       bloodGroup: bloodGroup ?? this.bloodGroup,
       isUrgent: isUrgent ?? this.isUrgent,
+      reason: reason ?? this.reason,
+      reasonNote: reasonNote ?? this.reasonNote,
       city: city ?? this.city,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
@@ -121,6 +135,23 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
 
   void setUrgent(bool urgent) =>
       state = state.copyWith(isUrgent: urgent);
+
+  /// Sets the reason for the request.
+  ///
+  /// The free-text note only applies to `other`, so it is cleared
+  /// whenever another reason is picked.
+  void setReason(RequestReason reason) => state = state.copyWith(
+        reason: reason,
+        reasonNote:
+            reason == RequestReason.other ? state.reasonNote : '',
+        clearError: true,
+      );
+
+  /// Sets the optional note shown when the reason is `other` (max 60).
+  void setReasonNote(String note) => state = state.copyWith(
+        reasonNote:
+            note.length > 60 ? note.substring(0, 60) : note,
+      );
 
   void setCity(String city) =>
       state = state.copyWith(city: city, clearError: true);
@@ -182,6 +213,11 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
       final response = await client.from('blood_requests').insert({
         'requester_id': user.id,
         'blood_group': state.bloodGroup!,
+        'reason': state.reason!.value,
+        'reason_note': state.reason == RequestReason.other &&
+                state.reasonNote.trim().isNotEmpty
+            ? state.reasonNote.trim()
+            : null,
         'units_needed': state.unitsNeeded,
         'hospital_name': state.hospitalName.trim(),
         'city': state.city!,
@@ -189,7 +225,9 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
         'is_urgent': state.isUrgent,
         'status': 'active',
         'allow_phone_contact': state.allowPhoneCall,
+        // UTC — naive local timestamps are parsed as UTC by Postgres.
         'expires_at': DateTime.now()
+            .toUtc()
             .add(const Duration(hours: 72))
             .toIso8601String(),
       }).select('id').single();

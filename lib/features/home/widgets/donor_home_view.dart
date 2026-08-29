@@ -21,7 +21,7 @@ class DonorHomeView extends ConsumerWidget {
     final profileAsync = ref.watch(userProfileProvider);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.fromLTRB(0, 16, 0, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -34,12 +34,9 @@ class DonorHomeView extends ConsumerWidget {
               const SizedBox.shrink(),
 
           // ── Urgent Requests Near You ──────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Urgent Requests Near You',
-              style: context.textTheme.titleLarge,
-            ),
+          _SectionHeader(
+            title: 'Urgent Requests Near You',
+            onSeeAll: () => context.pushNamed(RouteNames.map),
           ),
           const SizedBox(height: 12),
           const _UrgentRequestsList(),
@@ -59,6 +56,54 @@ class DonorHomeView extends ConsumerWidget {
             child: _DonationStatusCard(),
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Section header with "See All" link
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, this.onSeeAll});
+
+  final String title;
+  final VoidCallback? onSeeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(title, style: context.textTheme.titleLarge),
+          ),
+          if (onSeeAll != null)
+            GestureDetector(
+              onTap: onSeeAll,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'See All',
+                    style: context.textTheme.bodyMedium?.copyWith(
+                      color: context.colors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: context.colors.primary,
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -95,7 +140,7 @@ class _VerificationBannerState extends ConsumerState<_VerificationBanner> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: colors.card,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: colors.warning, width: 1.5),
           ),
           child: Column(
@@ -209,8 +254,14 @@ class _UrgentRequestCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.border, width: 1),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,8 +348,14 @@ class _DonationStatusCard extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: colors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: colors.border, width: 1),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -334,8 +391,14 @@ class _DonationStatusCard extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.border, width: 1),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [

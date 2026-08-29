@@ -39,7 +39,7 @@ class ChatScreen extends ConsumerWidget {
               ref.invalidate(conversationsListProvider);
             },
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               itemCount: conversations.length,
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, index) {

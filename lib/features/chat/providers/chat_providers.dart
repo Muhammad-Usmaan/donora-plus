@@ -188,7 +188,7 @@ class SendMessageAction {
 
       // Update conversation's updated_at so it sorts to the top.
       await client.from('conversations').update({
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', conversationId);
 
       return true;

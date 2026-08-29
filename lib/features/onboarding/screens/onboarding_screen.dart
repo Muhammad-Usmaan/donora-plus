@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,13 +8,19 @@ import '../../../core/utils/extensions.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../providers/onboarding_provider.dart';
 
-/// Three-slide horizontal onboarding flow.
+/// Three-slide onboarding with a circular photo hero on a brand-red
+/// panel and a rounded content sheet.
 ///
-/// Swipeable PageView with page-indicator dots (active = Primary,
-/// inactive = Neutral-300). Slides 1–2 show a "Skip" button in the
-/// top-right corner. Slide 3 shows a "Get Started" PrimaryButton.
+/// Layout per slide:
+/// - Top ~55%: primary-colored hero panel with a circular-masked photo
+///   (≈78% of panel width) whose bottom edge dips slightly past the
+///   seam into the content sheet for depth.
+/// - Bottom ~45%: surface sheet with 28px rounded top corners holding
+///   the left-aligned headline + subtext, page dots and a pill CTA
+///   ("Continue" on slides 1–2, "Get Started" on the last).
 ///
-/// Both "Skip" and "Get Started" persist the onboarding-seen flag via
+/// Slides 1–2 expose a "Skip" text button (top-right). Both "Skip" and
+/// "Get Started" persist the onboarding-seen flag via
 /// [onboardingSeenProvider] and navigate to the Auth screen.
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -22,9 +29,53 @@ class OnboardingScreen extends ConsumerStatefulWidget {
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
+// ── Shared layout constants ─────────────────────────────────────────────
+
+/// Hero panel height as a fraction of the screen.
+const double _heroFraction = 0.55;
+
+/// Circle diameter as a fraction of the panel (screen) width.
+const double _circleWidthFraction = 0.78;
+
+/// How far the circle's bottom edge dips below the hero/sheet seam.
+const double _seamDip = 28.0;
+
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _pageController = PageController();
   int _currentPage = 0;
+
+  /// Slide content — swap images/copy here without touching layout.
+  static const _slides = [
+    _OnboardingSlideData(
+      image: AssetImage(
+        'assets/images/onboarding/tim-marshall-cAtzHUz7Z8g-unsplash.jpg',
+      ),
+      headline: 'Real donors, real time',
+      body:
+          'Post a request and get matched with verified donors near '
+          'you — no more desperate social media appeals.',
+    ),
+    _OnboardingSlideData(
+      image: AssetImage(
+        'assets/images/onboarding/aman-chaturvedi-0ZZo5o00o80-unsplash.jpg',
+      ),
+      headline: 'Find blood in minutes, not hours',
+      body:
+          'City-scoped matching connects you instantly with real, '
+          'reachable donors in your area.',
+    ),
+    _OnboardingSlideData(
+      image: AssetImage(
+        'assets/images/onboarding/akram-huseyn-fKC9eWRnlGY-unsplash.jpg',
+      ),
+      headline: 'Every donor is verified',
+      body:
+          'Every donor completes CNIC and selfie verification, so you '
+          'can trust the people who show up.',
+    ),
+  ];
+
+  bool get _isLastSlide => _currentPage == _slides.length - 1;
 
   @override
   void dispose() {
@@ -37,156 +88,223 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (mounted) context.go(RoutePaths.auth);
   }
 
+  void _nextPage() {
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final mq = MediaQuery.of(context);
 
-    return Scaffold(
-      backgroundColor: colors.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Skip button (slides 1–2 only) ────────────────────────
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 16, 0),
-                child: _currentPage < 2
-                    ? TextButton(
-                        onPressed: _completeOnboarding,
-                        child: Text(
-                          'Skip',
-                          style: context.textTheme.labelLarge?.copyWith(
-                            color: colors.textMedium,
-                          ),
-                        ),
-                      )
-                    : const SizedBox(height: 48),
-              ),
-            ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // Status bar sits on the brand-red hero panel → light icons.
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: colors.primary,
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final panelHeight =
+                constraints.maxHeight * _heroFraction;
+            final circleDiameter =
+                constraints.maxWidth * _circleWidthFraction;
+            final circleBottom = panelHeight + _seamDip;
+            final circleTop = (circleBottom - circleDiameter)
+                .clamp(0.0, panelHeight);
 
-            // ── PageView ─────────────────────────────────────────────
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (index) =>
-                    setState(() => _currentPage = index),
-                children: const [
-                  _OnboardingSlide(
-                    icon: Icons.location_on_outlined,
-                    headline: 'Find blood in minutes, not hours',
-                    body:
-                        'Replace desperate social media appeals with a '
-                        'direct connection to verified donors near you. '
-                        'Post a request and get matched instantly.',
+            return Stack(
+              children: [
+                // ── Content sheet (overlaps the hero panel) ──────────
+                Positioned(
+                  top: panelHeight,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                    ),
                   ),
-                  _OnboardingSlide(
-                    icon: Icons.verified_user_outlined,
-                    headline: 'Verified donors near you',
-                    body:
-                        'Every donor completes CNIC and selfie '
-                        'verification. City-scoped matching ensures you '
-                        'see only real, reachable donors in your area.',
-                  ),
-                  _OnboardingSlide(
-                    icon: Icons.favorite_border,
-                    headline: 'Be someone\u2019s donor',
-                    body:
-                        'Join a community of lifesavers. Get notified '
-                        'when someone nearby needs your blood type and '
-                        'make a real difference — every donation counts.',
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Page indicator dots ──────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: _PageIndicator(
-                count: 3,
-                current: _currentPage,
-              ),
-            ),
-
-            // ── CTA (slide 3 only) ──────────────────────────────────
-            if (_currentPage == 2)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                child: PrimaryButton(
-                  label: 'Get Started',
-                  onPressed: _completeOnboarding,
                 ),
-              ),
 
-            // Bottom safe-area spacing for non-CTA slides.
-            if (_currentPage != 2) const SizedBox(height: 32),
-          ],
+                // ── Slides (image + copy swap per page) ───────────────
+                PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) =>
+                      setState(() => _currentPage = index),
+                  children: [
+                    for (final slide in _slides)
+                      _OnboardingSlide(
+                        slide: slide,
+                        panelHeight: panelHeight,
+                        circleTop: circleTop,
+                        circleDiameter: circleDiameter,
+                        // Reserve room for the static dots + CTA footer.
+                        footerHeight: mq.padding.bottom + 116,
+                      ),
+                  ],
+                ),
+
+                // ── Skip button (slides 1–2 only) ────────────────────
+                Positioned(
+                  top: mq.padding.top + 8,
+                  right: 16,
+                  child: _currentPage < _slides.length - 1
+                      ? TextButton(
+                          onPressed: _completeOnboarding,
+                          child: Text(
+                            'Skip',
+                            style: context.textTheme.labelLarge?.copyWith(
+                              color: Colors.white70,
+                            ),
+                          ),
+                        )
+                      : const SizedBox(height: 48),
+                ),
+
+                // ── Page dots + CTA (static below swiping content) ───
+                Positioned(
+                  left: 24,
+                  right: 24,
+                  bottom: mq.padding.bottom + 24,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PageIndicator(
+                        count: _slides.length,
+                        current: _currentPage,
+                      ),
+                      const SizedBox(height: 20),
+                      PrimaryButton(
+                        label: _isLastSlide ? 'Get Started' : 'Continue',
+                        radius: 16,
+                        onPressed:
+                            _isLastSlide ? _completeOnboarding : _nextPage,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// A single onboarding slide: illustration placeholder + headline + body.
-class _OnboardingSlide extends StatelessWidget {
-  const _OnboardingSlide({
-    required this.icon,
+/// Per-slide content: image, headline and body copy.
+class _OnboardingSlideData {
+  const _OnboardingSlideData({
+    required this.image,
     required this.headline,
     required this.body,
   });
 
-  final IconData icon;
+  /// Circular hero photo — asset or network image, swappable per slide.
+  final ImageProvider image;
   final String headline;
   final String body;
+}
+
+/// A single onboarding slide: circular photo at the hero/sheet seam
+/// plus left-aligned headline and subtext on the sheet.
+class _OnboardingSlide extends StatelessWidget {
+  const _OnboardingSlide({
+    required this.slide,
+    required this.panelHeight,
+    required this.circleTop,
+    required this.circleDiameter,
+    required this.footerHeight,
+  });
+
+  final _OnboardingSlideData slide;
+  final double panelHeight;
+  final double circleTop;
+  final double circleDiameter;
+  final double footerHeight;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(flex: 2),
-
-          // ── Illustration placeholder ──────────────────────────────
-          Container(
-            width: 160,
-            height: 160,
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              shape: BoxShape.circle,
+    return Stack(
+      children: [
+        // ── Circular hero photo, dipping past the seam ─────────────
+        Positioned(
+          top: circleTop,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              width: circleDiameter,
+              height: circleDiameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                image: DecorationImage(
+                  image: slide.image,
+                  fit: BoxFit.cover,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
             ),
-            child: Icon(
-              icon,
-              size: 64,
-              color: colors.primary,
-            ),
           ),
+        ),
 
-          const Spacer(flex: 1),
-
-          // ── Headline ──────────────────────────────────────────────
-          Text(
-            headline,
-            textAlign: TextAlign.center,
-            style: context.textTheme.headlineLarge,
+        // ── Headline + subtext (left-aligned, below the circle) ────
+        Positioned(
+          top: panelHeight + _seamDip + 20,
+          left: 24,
+          right: 24,
+          bottom: footerHeight,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Align(
+                alignment: Alignment.topLeft,
+                child: FittedBox(
+                  // Scales down gracefully on short screens.
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          slide.headline,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.textTheme.headlineLarge
+                              ?.copyWith(fontSize: 27),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          slide.body,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.textTheme.bodyMedium
+                              ?.copyWith(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
-          const SizedBox(height: 12),
-
-          // ── Body ──────────────────────────────────────────────────
-          Text(
-            body,
-            textAlign: TextAlign.center,
-            style: context.textTheme.bodyMedium,
-          ),
-
-          const Spacer(flex: 2),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -67,7 +67,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           // ── Recenter button (bottom-right) ─────────────────────────
           Positioned(
             right: 16,
-            bottom: 24,
+            bottom: 100,
             child: _RecenterButton(
               onPressed: () => _recenterToUser(),
             ),
@@ -651,7 +651,7 @@ class _EmptyStateOverlay extends ConsumerWidget {
     return Positioned(
       left: 32,
       right: 32,
-      bottom: 100,
+      bottom: 180,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(

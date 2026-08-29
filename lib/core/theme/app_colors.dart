@@ -91,7 +91,7 @@ class AppColors extends ThemeExtension<AppColors> {
     textHigh: Color(0xFF1B1B1F),
     textMedium: Color(0xFF52525B),
     border: Color(0xFFE4E4E7),
-    surface: Color(0xFFFAFAFA),
+    surface: Color(0xFFF7F7F9),
     card: Color(0xFFFFFFFF),
     volunteer: Color(0xFF2A6F77),
     compensated: Color(0xFFF9A825),

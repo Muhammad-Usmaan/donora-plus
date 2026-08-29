@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/constants/request_reasons.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -20,6 +21,8 @@ class RequestDetail {
     required this.expiresAt,
     this.notes,
     this.allowPhoneContact = false,
+    this.reason = RequestReason.other,
+    this.reasonNote,
   });
 
   final String id;
@@ -34,6 +37,12 @@ class RequestDetail {
   final DateTime expiresAt;
   final String? notes;
   final bool allowPhoneContact;
+
+  /// Why blood is needed — shown as a pill on the detail screen.
+  final RequestReason reason;
+
+  /// Free-text note shown when [reason] is [RequestReason.other].
+  final String? reasonNote;
 
   bool get isActive => status == 'active';
 
@@ -52,6 +61,8 @@ class RequestDetail {
             DateTime.now().add(const Duration(hours: 72)),
         notes: map['notes'] as String?,
         allowPhoneContact: map['allow_phone_contact'] as bool? ?? false,
+        reason: RequestReason.fromValue(map['reason'] as String?),
+        reasonNote: map['reason_note'] as String?,
       );
 }
 

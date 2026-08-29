@@ -21,6 +21,7 @@ class UserProfile {
     this.email,
     this.lastDonationDate,
     this.profilePhotoUrl,
+    this.totalDonations = 0,
   });
 
   final String id;
@@ -35,6 +36,7 @@ class UserProfile {
   final String? email;
   final DateTime? lastDonationDate;
   final String? profilePhotoUrl;
+  final int totalDonations;
 
   factory UserProfile.fromMap(Map<String, dynamic> map) => UserProfile(
         id: map['id'] as String? ?? '',
@@ -52,6 +54,7 @@ class UserProfile {
             ? DateTime.tryParse(map['last_donation_date'] as String)
             : null,
         profilePhotoUrl: map['profile_photo_url'] as String?,
+        totalDonations: map['total_donations'] as int? ?? 0,
       );
 }
 
@@ -158,6 +161,22 @@ final activeRequestsProvider =
       .eq('requester_id', user.id)
       .eq('status', 'active')
       .order('created_at', ascending: false);
+});
+
+// ── Response counts ──────────────────────────────────────────────────────────
+
+/// Number of donors who responded to a given request.
+///
+/// Used by the home request card ("{N} donors responded"). Per-request
+/// count — RLS already scopes responses to the requester or the donor.
+final requestResponseCountProvider =
+    FutureProvider.family<int, String>((ref, requestId) async {
+  final client = ref.watch(supabaseClientProvider);
+  final data = await client
+      .from('request_responses')
+      .select('id')
+      .eq('request_id', requestId);
+  return data.length;
 });
 
 // ── Urgent requests (realtime stream for donor view) ──────────────────────────

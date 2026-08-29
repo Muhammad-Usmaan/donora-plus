@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/env_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
+import 'features/notifications/providers/notification_settings_provider.dart';
+import 'services/notifications/fcm_bootstrap.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,9 +29,15 @@ void main() async {
     publishableKey: EnvConfig.supabaseAnonKey,
   );
 
+  // Local preferences (notification settings, etc.).
+  final prefs = await SharedPreferences.getInstance();
+
   runApp(
-    const ProviderScope(
-      child: DonoraPlusApp(),
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const DonoraPlusApp(),
     ),
   );
 }
@@ -41,9 +50,14 @@ class DonoraPlusApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
+    // FCM lifecycle: permission, token sync, foreground banners, deep links.
+    // Watching here keeps the listeners alive for the entire session.
+    ref.watch(fcmBootstrapProvider);
+
     return MaterialApp.router(
       title: 'Donora+',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       theme: AppTheme.light,
       routerConfig: router,
     );

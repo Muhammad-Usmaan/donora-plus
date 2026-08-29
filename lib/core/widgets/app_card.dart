@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../utils/extensions.dart';
 
-/// Flat card with white surface, 16px radius, and 1px border.
+/// Card with white surface, 20px radius, and soft shadow.
 ///
-/// Uses [AppColors.card] surface and [AppColors.border] outline —
-/// no drop shadows, keeping the design light and modern.
+/// Uses [AppColors.card] surface with a subtle drop shadow
+/// for depth against the #F7F7F9 scaffold background.
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -30,11 +30,17 @@ class AppCard extends StatelessWidget {
       padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: borderColor ?? colors.border,
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(20),
+        border: borderColor != null
+            ? Border.all(color: borderColor!, width: 1)
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: child,
     );

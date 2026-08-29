@@ -9,6 +9,7 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/donor_status_chip.dart';
 import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/reason_pill.dart';
 import '../../../core/widgets/secondary_button.dart';
 import '../../../core/widgets/urgent_request_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
@@ -160,6 +161,22 @@ class _RequestSummaryCard extends ConsumerWidget {
 
           // ── Blood type (large chip) ──────────────────────────────
           BloodTypeChip(bloodType: request.bloodGroup, selected: true),
+
+          const SizedBox(height: 12),
+
+          // ── Reason pill (+ free-text note for "other") ─
+          ReasonPill(reason: request.reason),
+          if (request.reasonNote != null &&
+              request.reasonNote!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              request.reasonNote!,
+              style: TextStyle(
+                fontSize: 13,
+                color: colors.textMedium,
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 
