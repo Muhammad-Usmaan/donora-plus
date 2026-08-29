@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment / secrets (NEVER commit keys)
+.env
+.env.local
+.env.*.local
+
+# Code generation output
+*.g.dart
+*.freezed.dart

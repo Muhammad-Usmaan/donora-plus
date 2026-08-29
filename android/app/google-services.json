@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "24737668883",
+    "project_id": "donoraplus-b2d5e",
+    "storage_bucket": "donoraplus-b2d5e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:24737668883:android:d0cd36f0d033d074f244e6",
+        "android_client_info": {
+          "package_name": "com.app.donora"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUPHWN5i7IRlT4XaoMeipQ0gS55lAbra8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

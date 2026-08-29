@@ -1,4 +1,4 @@
-package com.example.donora_plus
+package com.app.donora
 
 import io.flutter.embedding.android.FlutterActivity
 
