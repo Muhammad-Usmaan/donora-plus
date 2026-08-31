@@ -86,6 +86,18 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
     Navigator.of(context).pop((_currentCenter, _resolvedAddress));
   }
 
+  void _recenterToUser() async {
+    try {
+      final location = ref.read(locationServiceProvider);
+      final pos = await location.getCurrentPosition();
+      if (pos != null && mounted) {
+        _mapController.move(LatLng(pos.latitude, pos.longitude), 14.0);
+      }
+    } catch (_) {
+      // Silently ignore
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -171,6 +183,15 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
             ),
           ),
 
+          // ── Recenter button (bottom-right) ─────────────────────────
+          Positioned(
+            right: 16,
+            bottom: 154 + MediaQuery.of(context).padding.bottom,
+            child: _RecenterButton(
+              onPressed: _recenterToUser,
+            ),
+          ),
+
           // ── Bottom panel (address + confirm) ───────────────────────
           Positioned(
             left: 0,
@@ -248,6 +269,44 @@ class _LocationPickerScreenState extends ConsumerState<LocationPickerScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Recenter button
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _RecenterButton extends StatelessWidget {
+  const _RecenterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Material(
+      color: colors.card,
+      shape: const CircleBorder(),
+      elevation: 4,
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.border, width: 1),
+          ),
+          child: Icon(
+            Icons.my_location,
+            color: colors.primary,
+            size: 22,
+          ),
+        ),
       ),
     );
   }

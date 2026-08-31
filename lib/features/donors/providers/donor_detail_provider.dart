@@ -29,6 +29,8 @@ class DonorProfile {
     this.showLastDonationDate = false,
     this.phone,
     this.email,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -53,6 +55,9 @@ class DonorProfile {
   /// Call Now action; email is shown when no phone is on file.
   final String? phone;
   final String? email;
+
+  final double? latitude;
+  final double? longitude;
 
   /// Whether this donor can plausibly donate right now: they must be in
   /// donor mode, and — when their last donation date is public — at least
@@ -85,6 +90,8 @@ class DonorProfile {
             map['show_last_donation_date'] as bool? ?? false,
         phone: map['phone'] as String?,
         email: map['email'] as String?,
+        latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
+        longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
       );
 }
 

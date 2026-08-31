@@ -12,6 +12,8 @@ import '../../../core/utils/map_utils.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/verified_badge.dart';
+import '../../../services/providers.dart';
+import '../../profile/providers/profile_providers.dart';
 import '../providers/map_providers.dart';
 
 /// Full-screen map scoped to the user's current city using flutter_map +
@@ -96,9 +98,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final donors = donorsAsync.valueOrNull ?? [];
     final requests = requestsAsync.valueOrNull ?? [];
 
-    // Use GPS position for the current location dot (separate from map center).
+    // Use GPS position for the current location dot (only if real GPS in Pakistan is available).
     final gpsAsync = ref.watch(currentPositionProvider);
-    final currentLocation = gpsAsync.valueOrNull ?? center;
+    final currentLocation = gpsAsync.valueOrNull;
 
     // Build donor markers.
     final donorMarkers = donors.map((d) => _buildDonorMarker(d, colors)).toList();
@@ -132,33 +134,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         if (isDonor) MarkerLayer(markers: requestMarkers),
 
         // Current location indicator (subtle teal dot).
-        MarkerLayer(
-          markers: [
-            Marker(
-              point: currentLocation,
-              width: 20,
-              height: 20,
-              alignment: Alignment.center,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: colors.secondary.withValues(alpha: 0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: colors.secondary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+        if (currentLocation != null)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: currentLocation,
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colors.secondary.withValues(alpha: 0.3),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: colors.secondary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
       ],
     );
   }
@@ -296,20 +299,44 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  void _recenterToUser() {
+  void _recenterToUser() async {
     if (!_mapReady) return;
-    // Try GPS first, then fall back to city-based center.
-    final gpsAsync = ref.read(currentPositionProvider);
-    gpsAsync.whenData((gpsPos) {
-      if (gpsPos != null) {
-        _mapController.move(gpsPos, AppConstants.defaultZoom);
-        return;
+
+    final locService = ref.read(locationServiceProvider);
+    
+    // Try to get fresh GPS coordinates
+    final pos = await locService.getCurrentPosition();
+    if (pos != null) {
+      final lat = pos.latitude;
+      final lng = pos.longitude;
+      
+      // Attempt to resolve city and update Supabase
+      try {
+        final city = await locService.resolveCity(lat, lng) ?? '';
+        final fields = <String, dynamic>{
+          'latitude': lat,
+          'longitude': lng,
+        };
+        if (city.isNotEmpty) {
+          fields['city'] = city;
+        }
+        await ref.read(updateProfileFieldProvider)(fields);
+      } catch (_) {
+        // Silently fail DB updates if something goes wrong
       }
+
+      // Move camera
+      _mapController.move(LatLng(lat, lng), AppConstants.defaultZoom);
+      
+      // Invalidate current position provider so the blue dot updates
+      ref.invalidate(currentPositionProvider);
+    } else {
+      // Fall back to city-based center if GPS fails
       final centerAsync = ref.read(mapCenterProvider);
       centerAsync.whenData((center) {
         _mapController.move(center, AppConstants.defaultZoom);
       });
-    });
+    }
   }
 }
 

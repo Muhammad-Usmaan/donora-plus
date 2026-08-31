@@ -95,52 +95,117 @@ class SignupNotifier extends StateNotifier<SignupState> {
     required String password,
     required String fullName,
     required String phone,
+    required DateTime birthdate,
     required String role,
+    required String bloodGroup,
+    required String city,
+    double? latitude,
+    double? longitude,
+    String? donorClassification,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
+      final formattedDob =
+          '${birthdate.year.toString().padLeft(4, '0')}-${birthdate.month.toString().padLeft(2, '0')}-${birthdate.day.toString().padLeft(2, '0')}';
+
+      // Normalise Pakistani phone to +92XXXXXXXXXX format.
+      final digits = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
+      String? normalisedPhone;
+      if (digits.length == 11 && digits.startsWith('0')) {
+        normalisedPhone = '+92${digits.substring(1)}';
+      } else if (digits.length == 12 && digits.startsWith('92')) {
+        normalisedPhone = '+$digits';
+      } else if (digits.length == 13 && digits.startsWith('0092')) {
+        normalisedPhone = '+${digits.substring(2)}';
+      } else if (digits.length == 10) {
+        normalisedPhone = '+92$digits';
+      } else {
+        normalisedPhone = phone.trim();
+      }
+
+      // 1. Pre-check phone uniqueness via Supabase RPC to prevent registration collision.
+      final isTaken = await _ref
+          .read(authServiceProvider)
+          .isPhoneRegistered(normalisedPhone);
+      if (isTaken) {
+        state = state.copyWith(
+          isLoading: false,
+          serverError:
+              'This phone number is already registered with another account.',
+        );
+        return;
+      }
+
+      // 2. Sign up with Supabase Auth
       await _ref.read(authServiceProvider).signUpWithEmail(
             email.trim(),
             password,
             data: {
               'full_name': fullName.trim(),
-              'phone': phone.trim(),
+              'phone': normalisedPhone,
+              'date_of_birth': formattedDob,
               'active_role': role,
+              'blood_group': bloodGroup.trim(),
+              'city': city.trim(),
+              if (latitude != null) 'latitude': latitude,
+              if (longitude != null) 'longitude': longitude,
+              if (donorClassification != null && donorClassification.isNotEmpty)
+                'donor_classification': donorClassification,
             },
           );
 
-      // Create a profile row in Supabase so the user appears in
-      // queries immediately (before the verification flow).
+      // 3. Create or update profile row in Supabase
       final user = _ref.read(authServiceProvider).currentUser;
       if (user != null) {
-        // Normalise Pakistani phone to +92XXXXXXXXXX to satisfy DB check.
-        final digits = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
-        String? normalisedPhone;
-        if (digits.length == 11 && digits.startsWith('0')) {
-          normalisedPhone = '+92${digits.substring(1)}';
-        } else if (digits.length == 12 && digits.startsWith('92')) {
-          normalisedPhone = '+$digits';
-        } else if (digits.length == 13 && digits.startsWith('0092')) {
-          normalisedPhone = '+${digits.substring(2)}';
+        try {
+          await _ref.read(supabaseClientProvider).from('profiles').upsert({
+            'id': user.id,
+            'name': fullName.trim(),
+            'phone': normalisedPhone,
+            'email': email.trim(),
+            'date_of_birth': formattedDob,
+            'active_role': role,
+            'blood_group': bloodGroup.trim(),
+            'city': city.trim(),
+            if (latitude != null) 'latitude': latitude,
+            if (longitude != null) 'longitude': longitude,
+            if (donorClassification != null && donorClassification.isNotEmpty)
+              'donor_classification': donorClassification,
+          });
+        } on PostgrestException catch (pe) {
+          if (pe.code == '23505' ||
+              (pe.message.contains('profiles_phone_key') ||
+                  pe.message.contains('phone'))) {
+            state = state.copyWith(
+              isLoading: false,
+              serverError:
+                  'This phone number is already registered with another account.',
+            );
+            return;
+          }
+          rethrow;
         }
-
-        await _ref.read(supabaseClientProvider).from('profiles').upsert({
-          'id': user.id,
-          'name': fullName.trim(),
-          'phone': normalisedPhone,
-          'email': email.trim(),
-          'active_role': role,
-        });
       }
 
       state = const SignupState(success: true); // success — show confirmation
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false, serverError: e.message);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        serverError: 'Something went wrong. Please try again.',
-      );
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('phone') && msg.contains('unique') ||
+          msg.contains('profiles_phone_key') ||
+          msg.contains('duplicate')) {
+        state = state.copyWith(
+          isLoading: false,
+          serverError:
+              'This phone number is already registered with another account.',
+        );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          serverError: 'Something went wrong. Please try again.',
+        );
+      }
     }
   }
 

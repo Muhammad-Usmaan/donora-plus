@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/auth_providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 
 /// A donor card entry in the Donors list.
@@ -98,13 +99,21 @@ final donorListFilterProvider =
 /// Intentionally does NOT watch [donorListFilterProvider]: the fetch is
 /// filter-independent, so typing in the search box must not refetch.
 final donorsListProvider = FutureProvider<List<DonorListItem>>((ref) async {
+  final user = ref.watch(currentUserProvider);
   final client = ref.watch(supabaseClientProvider);
-  final data = await client
+
+  var query = client
       .from('profiles')
       .select(
           'id, name, blood_group, city, is_verified, is_top_donor, '
           'donor_classification, profile_photo_url')
-      .eq('active_role', 'donor')
+      .eq('active_role', 'donor');
+
+  if (user != null) {
+    query = query.neq('id', user.id);
+  }
+
+  final data = await query
       .order('created_at', ascending: false)
       .limit(200);
 

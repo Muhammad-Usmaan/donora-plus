@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Handles Firebase Cloud Messaging: permission requests, token management,
-/// and saving the device token to the user's Supabase profile.
+/// and saving the device token to the user's `device_tokens` table in
+/// Supabase so the backend can send targeted push notifications.
 ///
 /// Every method degrades gracefully when Firebase is unavailable (e.g. when
 /// google-services.json / GoogleService-Info.plist is missing) — the rest of
@@ -33,7 +36,7 @@ class FcmService {
   /// processed here.
   @pragma('vm:entry-point')
   static Future<void> backgroundHandler(RemoteMessage message) async {
-    // Intentionally a no-op for now.
+    // Intentionally a no-op — notification messages are displayed by the OS.
   }
 
   /// Full setup for a signed-in user: background handler registration,
@@ -46,11 +49,11 @@ class FcmService {
     FirebaseMessaging.onBackgroundMessage(backgroundHandler);
 
     await requestPermission();
-    await saveTokenToProfile();
+    await saveToken();
 
     // Keep the stored token fresh across token rotations.
     messaging.onTokenRefresh.listen((_) {
-      saveTokenToProfile();
+      saveToken();
     });
   }
 
@@ -72,16 +75,26 @@ class FcmService {
     return messaging.getToken();
   }
 
-  /// Saves the FCM token to the authenticated user's profile row
-  /// so the backend can send targeted push notifications.
-  Future<void> saveTokenToProfile() async {
+  /// Saves the FCM token to the `device_tokens` table via the
+  /// `upsert_device_token` RPC. Supports multiple devices per user —
+  /// the same token re-upserted just refreshes `updated_at`.
+  Future<void> saveToken() async {
     final token = await getToken();
     final userId = _supabase.auth.currentUser?.id;
     if (token == null || userId == null) return;
-    await _supabase
-        .from('profiles')
-        .update({'fcm_token': token})
-        .eq('id', userId);
+
+    try {
+      await _supabase.rpc(
+        'upsert_device_token',
+        params: {
+          'p_token': token,
+          'p_platform': _currentPlatform,
+        },
+      );
+    } catch (e) {
+      // Non-critical — token will be re-synced on next launch.
+      debugPrint('FCM: failed to save token: $e');
+    }
   }
 
   /// Removes the device token so the backend stops targeting this device
@@ -90,19 +103,29 @@ class FcmService {
   /// [userId] lets callers clean up during sign-out, after the Supabase
   /// session is already gone.
   Future<void> clearToken({String? userId}) async {
-    final id = userId ?? _supabase.auth.currentUser?.id;
     final messaging = _messaging;
+    String? token;
 
-    if (id != null) {
+    try {
+      token = await messaging?.getToken();
+    } catch (_) {
+      // Token may already be invalid.
+    }
+
+    final id = userId ?? _supabase.auth.currentUser?.id;
+
+    // Remove from device_tokens via RPC (uses auth.uid() internally).
+    if (id != null && token != null) {
       try {
-        await _supabase
-            .from('profiles')
-            .update({'fcm_token': null})
-            .eq('id', id);
+        await _supabase.rpc(
+          'delete_device_token',
+          params: {'p_token': token},
+        );
       } catch (_) {
         // Best-effort cleanup — non-critical.
       }
     }
+
     if (messaging != null) {
       try {
         await messaging.deleteToken();
@@ -119,7 +142,7 @@ class FcmService {
     return messaging.getInitialMessage();
   }
 
-  /// Stream of token refresh events — [saveTokenToProfile] is called
+  /// Stream of token refresh events — [saveToken] is called
   /// automatically when fired.
   Stream<String> get onTokenRefresh =>
       _messaging?.onTokenRefresh ?? const Stream<String>.empty();
@@ -137,4 +160,16 @@ class FcmService {
   /// Stream of notification taps that resumed a backgrounded app.
   Stream<RemoteMessage> get onMessageOpenedApp =>
       FirebaseMessaging.onMessageOpenedApp;
+
+  /// Detects the current platform for the `device_tokens.platform` column.
+  static String? get _currentPlatform {
+    if (kIsWeb) return 'web';
+    try {
+      if (Platform.isAndroid) return 'android';
+      if (Platform.isIOS) return 'ios';
+    } catch (_) {
+      // Platform not available (e.g. in tests).
+    }
+    return null;
+  }
 }

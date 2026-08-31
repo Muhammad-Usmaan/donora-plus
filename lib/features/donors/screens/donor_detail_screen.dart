@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/map_utils.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/donor_status_chip.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -386,13 +387,24 @@ class _DonorDetailBodyState extends ConsumerState<_DonorDetailBody> {
 
   Future<void> _callDonor() async {
     final phone = _donor.phone;
-    if (phone == null || phone.isEmpty) return;
+    if (phone == null || phone.isEmpty) {
+      if (mounted) {
+        context.showSnackBar('No phone number available for this donor.', isError: true);
+      }
+      return;
+    }
 
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else if (mounted) {
-      context.showSnackBar('Could not open the dialer.', isError: true);
+    try {
+      if (!await launchUrl(uri)) {
+        if (mounted) {
+          context.showSnackBar('No dialer app available to place the call.', isError: true);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showSnackBar('No dialer app available to place the call.', isError: true);
+      }
     }
   }
 
@@ -448,24 +460,39 @@ class _ContactLines extends StatelessWidget {
     return Column(
       children: [
         if (donor.city.isNotEmpty)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              PhosphorIcon(
-                PhosphorIconsRegular.mapPin,
-                size: 14,
-                color: colors.textMedium,
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  donor.city,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: muted,
+          GestureDetector(
+            onTap: () {
+              if (donor.latitude != null && donor.longitude != null) {
+                MapUtils.openPlaceMarker(
+                  donor.latitude!,
+                  donor.longitude!,
+                  label: donor.city,
+                );
+              } else {
+                MapUtils.openNavigationByName(donor.city);
+              }
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  PhosphorIconsRegular.mapPin,
+                  size: 14,
+                  color: colors.textMedium,
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    donor.city,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted.copyWith(decoration: TextDecoration.underline),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.open_in_new, size: 12, color: colors.textMedium),
+              ],
+            ),
           ),
         if (hasPhone) ...[
           if (donor.city.isNotEmpty) const SizedBox(height: 4),

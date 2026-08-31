@@ -91,6 +91,13 @@ class _ConversationCard extends StatelessWidget {
         context.pushNamed(
           RouteNames.conversation,
           pathParameters: {'id': conversation.id},
+          queryParameters: {
+            'name': conversation.otherUserName,
+            if (conversation.otherUserPhotoUrl != null &&
+                conversation.otherUserPhotoUrl!.isNotEmpty)
+              'photo': conversation.otherUserPhotoUrl!,
+            if (conversation.otherUserIsVerified) 'verified': '1',
+          },
         );
       },
       child: Row(

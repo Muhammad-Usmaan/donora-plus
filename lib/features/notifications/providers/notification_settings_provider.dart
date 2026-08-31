@@ -1,5 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../services/supabase/supabase_client_provider.dart';
 
 /// User preferences for push and in-app notifications.
 ///
@@ -47,15 +51,26 @@ class NotificationSettings {
   }
 }
 
-/// Persists [NotificationSettings] in SharedPreferences.
+/// Persists [NotificationSettings] in SharedPreferences (local cache) and
+/// syncs the server-side columns on `profiles` so the edge functions can
+/// honour per-category preferences when sending push notifications.
+///
+/// Column mapping:
+///   pushEnabled        → controls FCM token registration (no DB column)
+///   urgentRequests     → profiles.notify_new_requests
+///   newMessages        → profiles.notify_messages
+///   verificationUpdates → (local-only for now; no separate server column)
+///   topDonorUpdates    → (local-only for now; no separate server column)
 class NotificationSettingsNotifier
     extends StateNotifier<NotificationSettings> {
-  NotificationSettingsNotifier(this._prefs)
+  NotificationSettingsNotifier(this._prefs, this._supabase)
       : super(const NotificationSettings()) {
     _load();
+    _loadFromServer();
   }
 
   final SharedPreferences _prefs;
+  final SupabaseClient _supabase;
 
   static const _keyPush = 'notif.push_enabled';
   static const _keyUrgent = 'notif.urgent_requests';
@@ -73,29 +88,91 @@ class NotificationSettingsNotifier
     );
   }
 
+  /// Fetches the user's notification preferences from the `profiles` table
+  /// and merges them into the local state. Server values take precedence.
+  Future<void> _loadFromServer() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    try {
+      final row = await _supabase
+          .from('profiles')
+          .select(
+              'notify_new_requests, notify_messages, notify_request_updates')
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (row == null) return;
+
+      final serverNewRequests =
+          row['notify_new_requests'] as bool? ?? state.urgentRequests;
+      final serverMessages =
+          row['notify_messages'] as bool? ?? state.newMessages;
+      // notify_request_updates covers both verification + request update
+      // categories on the server; map it to both local toggles.
+      final serverRequestUpdates =
+          row['notify_request_updates'] as bool? ?? state.verificationUpdates;
+
+      state = state.copyWith(
+        urgentRequests: serverNewRequests,
+        newMessages: serverMessages,
+        verificationUpdates: serverRequestUpdates,
+        topDonorUpdates: serverRequestUpdates,
+      );
+
+      // Cache locally so the next cold-start is instant.
+      await _prefs.setBool(_keyUrgent, serverNewRequests);
+      await _prefs.setBool(_keyMessages, serverMessages);
+      await _prefs.setBool(_keyVerification, serverRequestUpdates);
+      await _prefs.setBool(_keyTopDonor, serverRequestUpdates);
+    } catch (e) {
+      debugPrint('NotificationSettings: failed to load from server: $e');
+    }
+  }
+
+  /// Persists the given [columns] map to the user's profile row.
+  Future<void> _persistToServer(Map<String, dynamic> columns) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    try {
+      await _supabase.from('profiles').update(columns).eq('id', userId);
+    } catch (e) {
+      debugPrint('NotificationSettings: failed to persist to server: $e');
+    }
+  }
+
   Future<void> setPushEnabled(bool value) async {
     state = state.copyWith(pushEnabled: value);
     await _prefs.setBool(_keyPush, value);
+    // pushEnabled is local-only — the FCM bootstrap watches it and
+    // registers/unregisters the device token accordingly.
   }
 
   Future<void> setUrgentRequests(bool value) async {
     state = state.copyWith(urgentRequests: value);
     await _prefs.setBool(_keyUrgent, value);
+    await _persistToServer({'notify_new_requests': value});
   }
 
   Future<void> setNewMessages(bool value) async {
     state = state.copyWith(newMessages: value);
     await _prefs.setBool(_keyMessages, value);
+    await _persistToServer({'notify_messages': value});
   }
 
   Future<void> setVerificationUpdates(bool value) async {
     state = state.copyWith(verificationUpdates: value);
     await _prefs.setBool(_keyVerification, value);
+    // Mapped to notify_request_updates on the server.
+    await _persistToServer({'notify_request_updates': value});
   }
 
   Future<void> setTopDonorUpdates(bool value) async {
     state = state.copyWith(topDonorUpdates: value);
     await _prefs.setBool(_keyTopDonor, value);
+    // Mapped to notify_request_updates on the server.
+    await _persistToServer({'notify_request_updates': value});
   }
 }
 
@@ -109,5 +186,8 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 
 final notificationSettingsProvider = StateNotifierProvider<
     NotificationSettingsNotifier, NotificationSettings>((ref) {
-  return NotificationSettingsNotifier(ref.watch(sharedPreferencesProvider));
+  return NotificationSettingsNotifier(
+    ref.watch(sharedPreferencesProvider),
+    ref.watch(supabaseClientProvider),
+  );
 });

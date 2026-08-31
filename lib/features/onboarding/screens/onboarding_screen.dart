@@ -48,30 +48,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   static const _slides = [
     _OnboardingSlideData(
       image: AssetImage(
-        'assets/images/onboarding/tim-marshall-cAtzHUz7Z8g-unsplash.jpg',
+        'assets/images/onboarding/akram-huseyn-fKC9eWRnlGY-unsplash.jpg',
       ),
-      headline: 'Real donors, real time',
+      headline: 'Verified Donors, Every Time',
       body:
-          'Post a request and get matched with verified donors near '
-          'you — no more desperate social media appeals.',
+          'Every donor on Donora+ is checked and confirmed, so you can trust every match.',
     ),
     _OnboardingSlideData(
       image: AssetImage(
         'assets/images/onboarding/aman-chaturvedi-0ZZo5o00o80-unsplash.jpg',
       ),
-      headline: 'Find blood in minutes, not hours',
+      headline: 'One Donation, One Life Saved',
       body:
-          'City-scoped matching connects you instantly with real, '
-          'reachable donors in your area.',
+          'A single unit of blood can mean the difference between waiting and surviving.',
     ),
     _OnboardingSlideData(
       image: AssetImage(
-        'assets/images/onboarding/akram-huseyn-fKC9eWRnlGY-unsplash.jpg',
+        'assets/images/onboarding/tim-marshall-cAtzHUz7Z8g-unsplash.jpg',
       ),
-      headline: 'Every donor is verified',
+      headline: 'A Network Built on People',
       body:
-          'Every donor completes CNIC and selfie verification, so you '
-          'can trust the people who show up.',
+          'Real donors, ready to help — no waiting on a viral post to save a life.',
     ),
   ];
 
@@ -107,13 +104,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         backgroundColor: colors.primary,
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final panelHeight =
-                constraints.maxHeight * _heroFraction;
-            final circleDiameter =
-                constraints.maxWidth * _circleWidthFraction;
+            final panelHeight = constraints.maxHeight * _heroFraction;
+            final circleDiameter = constraints.maxWidth * _circleWidthFraction;
             final circleBottom = panelHeight + _seamDip;
-            final circleTop = (circleBottom - circleDiameter)
-                .clamp(0.0, panelHeight);
+            final circleTop = (circleBottom - circleDiameter).clamp(
+              0.0,
+              panelHeight,
+            );
 
             return Stack(
               children: [
@@ -184,8 +181,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       PrimaryButton(
                         label: _isLastSlide ? 'Get Started' : 'Continue',
                         radius: 16,
-                        onPressed:
-                            _isLastSlide ? _completeOnboarding : _nextPage,
+                        onPressed: _isLastSlide
+                            ? _completeOnboarding
+                            : _nextPage,
                       ),
                     ],
                   ),
@@ -245,10 +243,7 @@ class _OnboardingSlide extends StatelessWidget {
               height: circleDiameter,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                image: DecorationImage(
-                  image: slide.image,
-                  fit: BoxFit.cover,
-                ),
+                image: DecorationImage(image: slide.image, fit: BoxFit.cover),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.25),
@@ -285,16 +280,18 @@ class _OnboardingSlide extends StatelessWidget {
                           slide.headline,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: context.textTheme.headlineLarge
-                              ?.copyWith(fontSize: 27),
+                          style: context.textTheme.headlineLarge?.copyWith(
+                            fontSize: 27,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           slide.body,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: context.textTheme.bodyMedium
-                              ?.copyWith(fontSize: 14),
+                          style: context.textTheme.bodyMedium?.copyWith(
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),

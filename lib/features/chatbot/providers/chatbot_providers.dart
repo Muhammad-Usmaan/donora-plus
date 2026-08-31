@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../services/providers.dart';
+import '../../../core/providers/auth_providers.dart';
 import '../../../services/chatbot/chatbot_service.dart';
 import '../../../services/chatbot/qwen_chatbot_service.dart';
+import '../../../services/providers.dart';
+import '../../../services/supabase/supabase_client_provider.dart';
 import '../../home/providers/home_providers.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -32,11 +34,13 @@ class ChatbotState {
   const ChatbotState({
     this.messages = const [],
     this.isAwaitingResponse = false,
+    this.isLoading = false,
     this.error,
   });
 
   final List<BotMessage> messages;
   final bool isAwaitingResponse;
+  final bool isLoading;
   final String? error;
 
   bool get isEmpty => messages.isEmpty;
@@ -48,12 +52,14 @@ class ChatbotState {
   ChatbotState copyWith({
     List<BotMessage>? messages,
     bool? isAwaitingResponse,
+    bool? isLoading,
     String? error,
     bool clearError = false,
   }) {
     return ChatbotState(
       messages: messages ?? this.messages,
       isAwaitingResponse: isAwaitingResponse ?? this.isAwaitingResponse,
+      isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -62,15 +68,80 @@ class ChatbotState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class ChatbotNotifier extends StateNotifier<ChatbotState> {
-  ChatbotNotifier(this._service, this._ref) : super(const ChatbotState());
+  ChatbotNotifier(this._service, this._ref)
+      : super(const ChatbotState(isLoading: true)) {
+    _loadHistory();
+  }
 
   final ChatbotService _service;
   final Ref _ref;
+  String? _conversationId;
+
+  Future<void> _loadHistory() async {
+    try {
+      final user = _ref.read(currentUserProvider);
+      if (user == null) {
+        state = state.copyWith(isLoading: false);
+        return;
+      }
+      final client = _ref.read(supabaseClientProvider);
+
+      // Fetch or create user's AI conversation
+      final convRow = await client
+          .from('conversations')
+          .select('id')
+          .eq('participant_1_id', user.id)
+          .isFilter('participant_2_id', null)
+          .maybeSingle();
+
+      if (convRow != null) {
+        _conversationId = convRow['id'] as String?;
+      } else {
+        final newConv = await client
+            .from('conversations')
+            .insert({
+              'participant_1_id': user.id,
+              'participant_2_id': null,
+            })
+            .select('id')
+            .single();
+        _conversationId = newConv['id'] as String?;
+      }
+
+      if (_conversationId != null) {
+        final msgRows = await client
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', _conversationId!)
+            .order('created_at', ascending: true);
+
+        final loaded = (msgRows as List).map((row) {
+          final sId = row['sender_id'] as String?;
+          final isUser = sId == user.id;
+          final content = row['content'] as String? ?? '';
+          final time = DateTime.tryParse(row['created_at'] as String? ?? '') ??
+              DateTime.now();
+          return BotMessage(
+            role: isUser ? 'user' : 'assistant',
+            content: content,
+            timestamp: time,
+          );
+        }).toList();
+
+        state = state.copyWith(
+          messages: loaded,
+          isLoading: false,
+        );
+        return;
+      }
+    } catch (_) {
+      // Fallback gracefully on network / auth error
+    }
+    state = state.copyWith(isLoading: false);
+  }
 
   /// Builds a plain-text summary of the current user's profile for the
-  /// system prompt.  Awaits the profile Future so context is always
-  /// available even on the very first message.  Returns null when no
-  /// profile is available.
+  /// system prompt.
   Future<String?> _buildUserContext() async {
     try {
       final profile = await _ref.read(userProfileProvider.future);
@@ -103,9 +174,39 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     }
   }
 
-  /// Sends a user message and awaits the bot's response.
+  Future<void> _ensureConversation(String userId) async {
+    if (_conversationId != null) return;
+    try {
+      final client = _ref.read(supabaseClientProvider);
+      final convRow = await client
+          .from('conversations')
+          .select('id')
+          .eq('participant_1_id', userId)
+          .isFilter('participant_2_id', null)
+          .maybeSingle();
+
+      if (convRow != null) {
+        _conversationId = convRow['id'] as String?;
+      } else {
+        final newConv = await client
+            .from('conversations')
+            .insert({
+              'participant_1_id': userId,
+              'participant_2_id': null,
+            })
+            .select('id')
+            .single();
+        _conversationId = newConv['id'] as String?;
+      }
+    } catch (_) {}
+  }
+
+  /// Sends a user message, persists it, calls the AI service, and persists the response.
   Future<void> send(String text) async {
     if (text.trim().isEmpty || state.isAwaitingResponse) return;
+
+    final user = _ref.read(currentUserProvider);
+    final client = _ref.read(supabaseClientProvider);
 
     final userMessage = BotMessage(
       role: 'user',
@@ -119,10 +220,23 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       clearError: true,
     );
 
+    if (user != null) {
+      await _ensureConversation(user.id);
+      if (_conversationId != null) {
+        try {
+          await client.from('messages').insert({
+            'conversation_id': _conversationId,
+            'sender_id': user.id,
+            'content': text.trim(),
+          });
+          await client.from('conversations').update({
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', _conversationId!);
+        } catch (_) {}
+      }
+    }
+
     try {
-      // Await profile context so the bot always receives user data,
-      // even on the very first message (when the profile Future may
-      // still be resolving).
       final userContext = await _buildUserContext();
 
       final reply = await _service.sendMessage(
@@ -142,6 +256,19 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
         messages: [...state.messages, botMessage],
         isAwaitingResponse: false,
       );
+
+      if (_conversationId != null) {
+        try {
+          await client.from('messages').insert({
+            'conversation_id': _conversationId,
+            'sender_id': null,
+            'content': reply,
+          });
+          await client.from('conversations').update({
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', _conversationId!);
+        } catch (_) {}
+      }
     } catch (e) {
       String errorMessage;
       if (e is ChatbotApiKeyException) {
@@ -157,9 +284,18 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     }
   }
 
-  /// Clears the entire conversation.
-  void clear() {
-    state = const ChatbotState();
+  /// Clears the entire conversation both locally and in Supabase.
+  Future<void> clear() async {
+    state = state.copyWith(messages: const []);
+    if (_conversationId != null) {
+      try {
+        final client = _ref.read(supabaseClientProvider);
+        await client
+            .from('messages')
+            .delete()
+            .eq('conversation_id', _conversationId!);
+      } catch (_) {}
+    }
   }
 }
 

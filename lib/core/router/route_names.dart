@@ -30,6 +30,7 @@ class RouteNames {
   static const String profile = 'profile';
   static const String locationPicker = 'location-picker';
   static const String helpFaq = 'help-faq';
+  static const String myRequests = 'my-requests';
 }
 
 /// Route path segments (used inside GoRoute definitions).
@@ -54,4 +55,5 @@ class RoutePaths {
   static const String profile = '/profile';
   static const String locationPicker = '/location-picker';
   static const String helpFaq = '/help-faq';
+  static const String myRequests = '/my-requests';
 }

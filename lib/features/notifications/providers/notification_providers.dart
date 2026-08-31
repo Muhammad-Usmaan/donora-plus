@@ -9,6 +9,10 @@ import '../../../services/supabase/supabase_client_provider.dart';
 /// Notification types supported by the app.
 enum NotificationType {
   urgentRequest,
+  newRequest,
+  requestAccepted,
+  requestFulfilled,
+  requestExpired,
   verificationApproved,
   newMessage,
   topDonor,
@@ -18,6 +22,14 @@ enum NotificationType {
     switch (value) {
       case 'urgent_request':
         return NotificationType.urgentRequest;
+      case 'new_request':
+        return NotificationType.newRequest;
+      case 'request_accepted':
+        return NotificationType.requestAccepted;
+      case 'request_fulfilled':
+        return NotificationType.requestFulfilled;
+      case 'request_expired':
+        return NotificationType.requestExpired;
       case 'verification_approved':
         return NotificationType.verificationApproved;
       case 'new_message':

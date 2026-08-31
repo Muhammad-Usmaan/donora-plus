@@ -113,17 +113,19 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         children: [
           // ── Messages area ──────────────────────────────────────
           Expanded(
-            child: state.isEmpty
-                ? _WelcomePlaceholder()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    itemCount: state.messages.length,
-                    itemBuilder: (_, index) {
-                      final msg = state.messages[index];
-                      return _BotBubble(message: msg);
-                    },
-                  ),
+            child: state.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : state.isEmpty
+                    ? _WelcomePlaceholder()
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        itemCount: state.messages.length,
+                        itemBuilder: (_, index) {
+                          final msg = state.messages[index];
+                          return _BotBubble(message: msg);
+                        },
+                      ),
           ),
 
           // ── Error banner ────────────────────────────────────────

@@ -11,18 +11,28 @@ import '../../../core/utils/extensions.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/urgent_button.dart';
+import '../../../services/location/location_service.dart';
 import '../../../services/providers.dart';
 import '../../home/providers/home_providers.dart';
 import '../providers/request_create_provider.dart';
+import '../providers/request_detail_provider.dart';
 
-/// "Request Blood" full-screen form.
+/// "Request Blood" full-screen form (Create & Edit).
 ///
-/// Reached via the UrgentButton on the seeker home screen.
+/// Reached via the UrgentButton on the seeker home screen or the Edit button
+/// on the Request Detail screen.
 /// Fields: blood type, urgency, reason, city, hospital, units, notes,
 /// contact pref.
 /// On submit: shows success state with "View Request" button.
 class RequestCreateScreen extends ConsumerStatefulWidget {
-  const RequestCreateScreen({super.key});
+  const RequestCreateScreen({
+    super.key,
+    this.initialRequest,
+    this.editRequestId,
+  });
+
+  final RequestDetail? initialRequest;
+  final String? editRequestId;
 
   @override
   ConsumerState<RequestCreateScreen> createState() =>
@@ -30,6 +40,7 @@ class RequestCreateScreen extends ConsumerStatefulWidget {
 }
 
 class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
+  final _patientNameController = TextEditingController();
   final _hospitalController = TextEditingController();
   final _notesController = TextEditingController();
   final _reasonNoteController = TextEditingController();
@@ -38,26 +49,52 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill city from user profile.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(userProfileProvider.future)
-          .then((profile) {
-            if (mounted) {
-              ref
-                  .read(requestCreateProvider.notifier)
-                  .prefillCity(profile.city);
-            }
-          })
-          .catchError((_) {
-            // Profile unavailable (not signed in, network error, etc.).
-            // The user can still select a city manually.
-          });
+      if (widget.initialRequest != null) {
+        ref
+            .read(requestCreateProvider.notifier)
+            .initializeForEdit(widget.initialRequest!);
+        _patientNameController.text = widget.initialRequest!.patientName;
+        _hospitalController.text = widget.initialRequest!.hospitalName;
+        _notesController.text = widget.initialRequest!.notes ?? '';
+        _reasonNoteController.text = widget.initialRequest!.reasonNote ?? '';
+      } else if (widget.editRequestId != null) {
+        ref
+            .read(requestDetailProvider(widget.editRequestId!).future)
+            .then((req) {
+          if (mounted) {
+            ref
+                .read(requestCreateProvider.notifier)
+                .initializeForEdit(req);
+            _patientNameController.text = req.patientName;
+            _hospitalController.text = req.hospitalName;
+            _notesController.text = req.notes ?? '';
+            _reasonNoteController.text = req.reasonNote ?? '';
+          }
+        }).catchError((_) {});
+      } else {
+        ref.read(requestCreateProvider.notifier).resetForCreate();
+        // Pre-fill city from user profile.
+        ref
+            .read(userProfileProvider.future)
+            .then((profile) {
+              if (mounted) {
+                ref
+                    .read(requestCreateProvider.notifier)
+                    .prefillCity(profile.city);
+              }
+            })
+            .catchError((_) {
+              // Profile unavailable (not signed in, network error, etc.).
+              // The user can still select a city manually.
+            });
+      }
     });
   }
 
   @override
   void dispose() {
+    _patientNameController.dispose();
     _hospitalController.dispose();
     _notesController.dispose();
     _reasonNoteController.dispose();
@@ -72,13 +109,16 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
 
     // If successfully submitted, show the success state.
     if (formState.isSubmitted) {
-      return _SuccessView(requestId: formState.createdRequestId!);
+      return _SuccessView(
+        requestId: formState.createdRequestId!,
+        isEditing: formState.isEditing,
+      );
     }
 
     return Scaffold(
       backgroundColor: colors.surface,
       appBar: AppBar(
-        title: const Text('Request Blood'),
+        title: Text(formState.isEditing ? 'Edit Request' : 'Request Blood'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => context.pop(),
@@ -120,7 +160,17 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                         .read(requestCreateProvider.notifier)
                         .setUrgent(v),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // ── Planned date (non-urgent only) ────────────────
+                  if (!formState.isUrgent)
+                    _PlannedDatePicker(
+                      selectedDate: formState.plannedDate,
+                      onDateSelected: (date) => ref
+                          .read(requestCreateProvider.notifier)
+                          .setPlannedDate(date),
+                    ),
+                  if (!formState.isUrgent) const SizedBox(height: 24),
 
                   // ── Reason for request (required) ──
                   const _SectionLabel(
@@ -160,6 +210,38 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 24),
+
+                  // ── Patient Name (required) ──────────────────────
+                  const _SectionLabel(
+                      label: 'Patient Full Name', required: true),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _patientNameController,
+                    onChanged: (v) => ref
+                        .read(requestCreateProvider.notifier)
+                        .setPatientName(v),
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Ali Ahmed',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      filled: true,
+                      fillColor: colors.card,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: colors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: colors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: colors.primary, width: 1.5),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
 
                   // ── City / location ──────────────────────────────
@@ -277,7 +359,7 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
               border: Border(top: BorderSide(color: colors.border, width: 1)),
             ),
             child: UrgentButton(
-              label: 'Post Request',
+              label: formState.isEditing ? 'Save Changes' : 'Post Request',
               isLoading: formState.isSubmitting,
               onPressed: formState.isValid
                   ? () => ref.read(requestCreateProvider.notifier).submit()
@@ -608,6 +690,113 @@ class _UrgencyOption extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Planned date picker (non-urgent requests)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _PlannedDatePicker extends StatelessWidget {
+  const _PlannedDatePicker({
+    required this.selectedDate,
+    required this.onDateSelected,
+  });
+
+  final DateTime? selectedDate;
+  final ValueChanged<DateTime> onDateSelected;
+
+  Future<void> _pickDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate ?? now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+      helpText: 'When do you need this?',
+    );
+    if (picked != null) {
+      onDateSelected(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel(label: 'Needed By Date', required: true),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => _pickDate(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: colors.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selectedDate != null
+                    ? colors.primary.withValues(alpha: 0.5)
+                    : colors.border,
+                width: selectedDate != null ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 18,
+                  color: selectedDate != null
+                      ? colors.primary
+                      : colors.textMedium,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    selectedDate != null
+                        ? _formatDate(selectedDate!)
+                        : 'Select the date donation is needed',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: selectedDate != null
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: selectedDate != null
+                          ? colors.textHigh
+                          : colors.textMedium,
+                    ),
+                  ),
+                ),
+                if (selectedDate != null)
+                  IconButton(
+                    onPressed: () => _pickDate(context),
+                    icon: Icon(
+                      Icons.edit_calendar,
+                      size: 18,
+                      color: colors.primary,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _formatDate(DateTime date) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Location selector (searchable city + GPS + map picker)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -645,6 +834,15 @@ class _LocationSelectorState extends ConsumerState<_LocationSelector> {
   }
 
   @override
+  void didUpdateWidget(covariant _LocationSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selected != oldWidget.selected &&
+        widget.selected != _searchController.text) {
+      _searchController.text = widget.selected ?? '';
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _focusNode.dispose();
@@ -666,6 +864,10 @@ class _LocationSelectorState extends ConsumerState<_LocationSelector> {
       final pos = await location.getCurrentPosition();
       if (pos == null || !mounted) {
         _showError('Could not get your location. Check permissions.');
+        return;
+      }
+      if (!LocationService.isInPakistan(pos.latitude, pos.longitude)) {
+        _showError('Location is outside Pakistan. Please select your city manually.');
         return;
       }
       final city = await location.resolveCity(
@@ -1070,9 +1272,13 @@ class _ContactOption extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _SuccessView extends StatelessWidget {
-  const _SuccessView({required this.requestId});
+  const _SuccessView({
+    required this.requestId,
+    this.isEditing = false,
+  });
 
   final String requestId;
+  final bool isEditing;
 
   @override
   Widget build(BuildContext context) {
@@ -1103,7 +1309,9 @@ class _SuccessView extends StatelessWidget {
               const SizedBox(height: 24),
 
               Text(
-                'Your request is live.',
+                isEditing
+                    ? 'Request updated successfully.'
+                    : 'Your request is live.',
                 style: context.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -1112,7 +1320,9 @@ class _SuccessView extends StatelessWidget {
               const SizedBox(height: 8),
 
               Text(
-                'Verified donors nearby have been notified.\nYou\'ll receive responses in your chat.',
+                isEditing
+                    ? 'Your blood request changes have been saved.'
+                    : 'Verified donors nearby have been notified.\nYou\'ll receive responses in your chat.',
                 style: context.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),

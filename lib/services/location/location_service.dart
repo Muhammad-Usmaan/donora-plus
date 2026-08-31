@@ -9,6 +9,12 @@ class LocationService {
 
   final http.Client _http;
 
+  /// Checks if [lat]/[lng] is within Pakistan's geographical bounding box.
+  /// Used to ignore Android emulator default coordinates (Mountain View, CA).
+  static bool isInPakistan(double lat, double lng) {
+    return lat >= 23.0 && lat <= 37.5 && lng >= 60.0 && lng <= 78.0;
+  }
+
   /// Checks and requests location permissions.
   /// Returns true if permission is granted.
   Future<bool> checkPermission() async {

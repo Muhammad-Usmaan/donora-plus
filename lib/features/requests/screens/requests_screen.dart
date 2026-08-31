@@ -346,7 +346,7 @@ class _RequestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row: urgency, status, posted time.
+          // Header row: urgency, status, expiry / posted time.
           Row(
             children: [
               if (request.isUrgent) ...[
@@ -355,11 +355,16 @@ class _RequestCard extends StatelessWidget {
               ],
               _StatusChip(request: request),
               const Spacer(),
-              Text(
-                Formatters.timeAgo(request.createdAt),
-                style: context.textTheme.bodySmall
-                    ?.copyWith(color: colors.textMedium),
-              ),
+              if (request.isActive && request.isUrgent)
+                _ListExpiryLabel(expiresAt: request.expiresAt, isUrgent: true)
+              else if (request.isActive && !request.isUrgent && request.plannedDate != null)
+                _ListExpiryLabel(expiresAt: request.expiresAt, isUrgent: false, plannedDate: request.plannedDate!)
+              else
+                Text(
+                  Formatters.timeAgo(request.createdAt),
+                  style: context.textTheme.bodySmall
+                      ?.copyWith(color: colors.textMedium),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -584,6 +589,84 @@ class _ErrorView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Expiry label for request list cards
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _ListExpiryLabel extends StatelessWidget {
+  const _ListExpiryLabel({
+    required this.expiresAt,
+    required this.isUrgent,
+    this.plannedDate,
+  });
+
+  final DateTime expiresAt;
+  final bool isUrgent;
+  final DateTime? plannedDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    if (!isUrgent && plannedDate != null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: colors.secondaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.event_outlined, size: 12, color: colors.secondary),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                Formatters.neededBy(plannedDate!),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colors.secondary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final countdown = Formatters.expiresCountdown(expiresAt);
+    final isLow = expiresAt.difference(DateTime.now()).inHours < 6;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isLow ? colors.urgentContainer : colors.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isLow ? Icons.warning_amber_rounded : Icons.schedule,
+            size: 12,
+            color: isLow ? colors.urgent : colors.primary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            countdown,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isLow ? colors.urgent : colors.primary,
+            ),
+          ),
+        ],
       ),
     );
   }

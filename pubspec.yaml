@@ -22,7 +22,7 @@ dependencies:
   riverpod_annotation: ^2.6.1
 
   # Backend
-  supabase_flutter: ^2.8.4
+  supabase_flutter: ^2.9.0
 
   # Navigation
   go_router: ^15.1.3
@@ -68,5 +68,4 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/documentation/
     - assets/images/onboarding/

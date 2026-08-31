@@ -34,4 +34,21 @@ class Formatters {
   /// Distance in km with 1 decimal place: "3.2 km"
   static String distanceKm(double meters) =>
       '${(meters / 1000).toStringAsFixed(1)} km';
+
+  /// Human-readable countdown to an expiry timestamp.
+  ///
+  /// Returns strings like "Expires in 3h", "Expires in 45m",
+  /// or "Expires in 2d" depending on the remaining time.
+  static String expiresCountdown(DateTime expiresAt) {
+    final remaining = expiresAt.difference(DateTime.now());
+    if (remaining.isNegative) return 'Expired';
+    if (remaining.inHours < 1) return 'Expires in ${remaining.inMinutes}m';
+    if (remaining.inHours < 24) return 'Expires in ${remaining.inHours}h';
+    return 'Expires in ${remaining.inDays}d';
+  }
+
+  /// "Needed by [date]" label for planned (non-urgent) requests.
+  static String neededBy(DateTime plannedDate) {
+    return 'Needed by ${dateShort(plannedDate)}';
+  }
 }

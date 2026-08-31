@@ -11,11 +11,13 @@ class BloodTypeChip extends StatelessWidget {
     super.key,
     required this.bloodType,
     this.selected = false,
+    this.compact = false,
     this.onTap,
   });
 
   final String bloodType;
   final bool selected;
+  final bool compact;
   final VoidCallback? onTap;
 
   @override
@@ -27,7 +29,9 @@ class BloodTypeChip extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: compact
+            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
+            : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? colors.primary : colors.primaryContainer,
           borderRadius: BorderRadius.circular(999),
@@ -35,7 +39,7 @@ class BloodTypeChip extends StatelessWidget {
         child: Text(
           bloodType,
           style: TextStyle(
-            fontSize: 15,
+            fontSize: compact ? 12 : 15,
             fontWeight: FontWeight.w700,
             color: selected ? Colors.white : colors.primary,
             height: 1.2,

@@ -10,6 +10,7 @@ import '../../core/providers/auth_providers.dart';
 import '../../features/verification/screens/verification_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/map/screens/map_screen.dart';
+import '../../features/requests/providers/request_detail_provider.dart';
 import '../../features/requests/screens/requests_screen.dart';
 import '../../features/requests/screens/request_create_screen.dart';
 import '../../features/requests/screens/request_detail_screen.dart';
@@ -20,19 +21,12 @@ import '../../features/chat/screens/conversation_screen.dart';
 import '../../features/chatbot/screens/chatbot_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/my_requests_screen.dart';
 import '../../features/profile/screens/help_faq_screen.dart';
 import '../../features/requests/screens/location_picker_screen.dart';
 import '../widgets/main_shell.dart';
 
-/// Navigator keys for each tab branch (required by StatefulShellRoute).
-final GlobalKey<NavigatorState> _homeNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'home');
-final GlobalKey<NavigatorState> _mapNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'map');
-final GlobalKey<NavigatorState> _chatNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'chat');
-final GlobalKey<NavigatorState> _profileNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'profile');
+/// Navigator key for the root navigator.
 final GlobalKey<NavigatorState> _rootNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -55,6 +49,10 @@ final routerProvider = Provider<GoRouter>((ref) {
   // so GoRouter re-evaluates redirects (e.g. login → home, logout → auth).
   final authRefresh = _AuthRefreshNotifier(ref);
 
+  ref.onDispose(() {
+    authRefresh.dispose();
+  });
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: RoutePaths.splash,
@@ -62,16 +60,19 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       // ── Splash (initial entry point) ──────────────────────────────
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.splash,
         path: RoutePaths.splash,
         builder: (_, _) => const SplashScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.onboarding,
         path: RoutePaths.onboarding,
         builder: (_, _) => const OnboardingScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.auth,
         path: RoutePaths.auth,
         builder: (_, _) => const AuthScreen(),
@@ -85,7 +86,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           // Home tab
           StatefulShellBranch(
-            navigatorKey: _homeNavigatorKey,
             routes: [
               GoRoute(
                 name: RouteNames.home,
@@ -96,7 +96,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           // Map tab
           StatefulShellBranch(
-            navigatorKey: _mapNavigatorKey,
             routes: [
               GoRoute(
                 name: RouteNames.map,
@@ -107,33 +106,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           // Chat tab
           StatefulShellBranch(
-            navigatorKey: _chatNavigatorKey,
             routes: [
               GoRoute(
                 name: RouteNames.chat,
                 path: RoutePaths.chat,
                 builder: (_, _) => const ChatScreen(),
-                routes: [
-                  GoRoute(
-                    name: RouteNames.conversation,
-                    path: ':id',
-                    builder: (_, state) => ConversationScreen(
-                      conversationId: state.pathParameters['id'] ?? '',
-                      otherUserName:
-                          state.uri.queryParameters['name'],
-                      otherUserPhotoUrl:
-                          state.uri.queryParameters['photo'],
-                      otherUserIsVerified:
-                          state.uri.queryParameters['verified'] == '1',
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
           // Profile tab
           StatefulShellBranch(
-            navigatorKey: _profileNavigatorKey,
             routes: [
               GoRoute(
                 name: RouteNames.profile,
@@ -147,6 +129,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ── Full-screen routes (pushed on top of the shell) ─────────
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.verification,
         path: RoutePaths.verification,
         builder: (_, _) => const VerificationScreen(),
@@ -154,21 +137,37 @@ final routerProvider = Provider<GoRouter>((ref) {
       // AI assistant — full-screen route; the Home "Ask Donora AI"
       // card is its single entry point (not a bottom-nav tab).
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.chatbot,
         path: RoutePaths.chatbot,
         builder: (_, _) => const ChatbotScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.requests,
         path: RoutePaths.requests,
         builder: (_, _) => const RequestsScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.requestCreate,
         path: RoutePaths.requestCreate,
-        builder: (_, _) => const RequestCreateScreen(),
+        builder: (_, state) {
+          final extra = state.extra;
+          RequestDetail? initialRequest;
+          if (extra is RequestDetail) {
+            initialRequest = extra;
+          }
+          final editRequestId =
+              state.uri.queryParameters['editId'] ?? initialRequest?.id;
+          return RequestCreateScreen(
+            initialRequest: initialRequest,
+            editRequestId: editRequestId,
+          );
+        },
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.requestDetail,
         path: RoutePaths.requestDetail,
         builder: (_, state) => RequestDetailScreen(
@@ -176,11 +175,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.donors,
         path: RoutePaths.donors,
         builder: (_, _) => const DonorsScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.donorDetail,
         path: RoutePaths.donorDetail,
         builder: (_, state) => DonorDetailScreen(
@@ -188,16 +189,36 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.conversation,
+        path: RoutePaths.conversation,
+        builder: (_, state) => ConversationScreen(
+          conversationId: state.pathParameters['id'] ?? '',
+          otherUserName: state.uri.queryParameters['name'],
+          otherUserPhotoUrl: state.uri.queryParameters['photo'],
+          otherUserIsVerified: state.uri.queryParameters['verified'] == '1',
+        ),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.notifications,
         path: RoutePaths.notifications,
         builder: (_, _) => const NotificationsScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.helpFaq,
         path: RoutePaths.helpFaq,
         builder: (_, _) => const HelpFaqScreen(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.myRequests,
+        path: RoutePaths.myRequests,
+        builder: (_, _) => const MyRequestsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.locationPicker,
         path: RoutePaths.locationPicker,
         builder: (_, state) => LocationPickerScreen(
@@ -213,11 +234,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     // the user is signed out. The splash screen handles initial routing;
     // this catches edge cases (e.g. browser back/forward, deep links).
     redirect: (context, state) {
-      final user = ref.read(currentUserProvider);
+      // Read the user directly from the auth service (synchronous) to avoid
+      // the StreamProvider race condition where authStateProvider is still
+      // in AsyncLoading on the first redirect evaluation after sign-in.
+      final user = ref.read(authServiceProvider).currentUser;
       final path = state.matchedLocation;
       final isAuthFlow = path == RoutePaths.splash ||
           path == RoutePaths.onboarding ||
-          path == RoutePaths.auth;
+          path == RoutePaths.auth ||
+          path == RoutePaths.locationPicker;
 
       // Signed-out user trying to access a protected route → auth.
       if (user == null && !isAuthFlow) return RoutePaths.auth;

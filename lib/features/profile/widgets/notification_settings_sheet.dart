@@ -8,10 +8,11 @@ import '../../../services/notifications/fcm_service.dart';
 
 /// Bottom sheet for the "Notifications" preference row.
 ///
-/// Master push toggle plus per-category switches, persisted locally via
-/// [notificationSettingsProvider]. When push is enabled the FCM token is
-/// (re-)registered on the profile; when disabled it is removed so the
-/// backend stops targeting the device.
+/// Master push toggle plus per-category switches, persisted to both
+/// SharedPreferences (local cache) and the `profiles` table in Supabase
+/// via [notificationSettingsProvider]. When push is enabled the FCM token
+/// is (re-)registered on the device_tokens table; when disabled it is
+/// removed so the backend stops targeting the device.
 void showNotificationSettingsSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,

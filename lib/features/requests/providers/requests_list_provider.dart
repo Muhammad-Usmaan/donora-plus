@@ -31,6 +31,7 @@ class RequestListItem {
     this.notes,
     this.reason = RequestReason.other,
     this.reasonNote,
+    this.plannedDate,
   });
 
   final String id;
@@ -50,6 +51,9 @@ class RequestListItem {
 
   /// Free-text note shown when [reason] is [RequestReason.other].
   final String? reasonNote;
+
+  /// When the donation is actually needed (non-urgent / pre-planned only).
+  final DateTime? plannedDate;
 
   bool get isActive => status == 'active' && !isExpired;
 
@@ -88,6 +92,9 @@ class RequestListItem {
         notes: map['notes'] as String?,
         reason: RequestReason.fromValue(map['reason'] as String?),
         reasonNote: map['reason_note'] as String?,
+        plannedDate: map['planned_date'] != null
+            ? DateTime.tryParse(map['planned_date'] as String)
+            : null,
       );
 }
 
@@ -160,7 +167,7 @@ final requestsListProvider =
   const columns =
       'id, requester_id, blood_group, units_needed, hospital_name, city, '
       'is_urgent, status, created_at, expires_at, notes, reason, '
-      'reason_note';
+      'reason_note, planned_date';
 
   // Filters first (filter builder), then the shared order/limit chain —
   // .order()/.limit() return a transform builder, so both are applied

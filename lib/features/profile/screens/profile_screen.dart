@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
-import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_card.dart'; 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/donor_status_chip.dart';
@@ -86,7 +86,7 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-// ── Profile body ──────────────────────────────────────────────────────────────
+// â”€â”€ Profile body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _ProfileBody extends ConsumerWidget {
   const _ProfileBody({required this.profile});
@@ -100,26 +100,30 @@ class _ProfileBody extends ConsumerWidget {
   /// Subtitle for the Phone Number row.
   String? _phoneSubtitle(UserProfile p) {
     if (p.phone == null || p.phone!.isEmpty) {
-      return 'Not set — tap to add';
+      return 'Not set â€” tap to add';
     }
     return p.phone;
   }
 
-  /// Email is fixed for security — explain instead of allowing edits.
+  /// Email is fixed for security â€” explain instead of allowing edits.
   void _showEmailInfoDialog(BuildContext context) {
-    showAppDialog(
+    // Use showDialog with a builder so Navigator.of(ctx) targets the
+    // dialog's own layer â€” not the GoRouter shell (avoids "last page" crash).
+    showDialog<void>(
       context: context,
-      title: 'Email Address',
-      message: 'For security reasons, your email address can\'t be '
-          'changed. It is used to sign in to Donora+.',
-      icon: Icons.alternate_email,
-      iconColor: context.colors.secondary,
-      actions: [
-        DialogActionButton(
-          label: 'Got It',
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ],
+      builder: (ctx) => AppDialog(
+        title: 'Email Address',
+        message: 'For security reasons, your email address can\'t be '
+            'changed. It is used to sign in to Donora+.',
+        icon: Icons.alternate_email,
+        iconColor: context.colors.secondary,
+        actions: [
+          DialogActionButton(
+            label: 'Got It',
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -128,15 +132,15 @@ class _ProfileBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       children: [
-        // ── Header ─────────────────────────────────────────────
+        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _ProfileHeader(profile: profile),
         const SizedBox(height: 24),
 
-        // ── Stats: Blood Type / Donated / Requested ──────────
+        // â”€â”€ Stats: Blood Type / Donated / Requested â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _StatsRow(profile: profile),
         const SizedBox(height: 24),
 
-        // ── Account ────────────────────────────────────────────
+        // â”€â”€ Account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         const _SectionTitle(title: 'Account'),
         const SizedBox(height: 8),
         AppCard(
@@ -187,7 +191,7 @@ class _ProfileBody extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        // ── Donor Settings (conditional) ───────────────────────
+        // â”€â”€ Donor Settings (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (_isDonor) ...[
           const _SectionTitle(title: 'Donor Settings'),
           const SizedBox(height: 8),
@@ -201,7 +205,7 @@ class _ProfileBody extends ConsumerWidget {
                   trailing: BloodTypeChip(
                     bloodType: profile.bloodGroup.isNotEmpty
                         ? profile.bloodGroup
-                        : '—',
+                        : 'â€”',
                   ),
                   onTap: () => _showBloodTypePicker(context, ref),
                 ),
@@ -225,7 +229,20 @@ class _ProfileBody extends ConsumerWidget {
           const SizedBox(height: 24),
         ],
 
-        // ── Preferences ────────────────────────────────────────
+        // â”€â”€ My Requests (seeker only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        if (profile.activeRole == 'seeker') ...[
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: _SettingsRow(
+              icon: Icons.list_alt_outlined,
+              label: 'My Requests',
+              onTap: () => context.pushNamed(RouteNames.myRequests),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        // â”€â”€ Preferences â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         const _SectionTitle(title: 'Preferences'),
         const SizedBox(height: 8),
         AppCard(
@@ -255,7 +272,7 @@ class _ProfileBody extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        // ── Support ────────────────────────────────────────────
+        // â”€â”€ Support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         const _SectionTitle(title: 'Support'),
         const SizedBox(height: 8),
         AppCard(
@@ -284,7 +301,7 @@ class _ProfileBody extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        // ── Account Actions ────────────────────────────────────
+        // â”€â”€ Account Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         const _SectionTitle(title: 'Account Actions'),
         const SizedBox(height: 8),
         const AppCard(
@@ -301,7 +318,7 @@ class _ProfileBody extends ConsumerWidget {
     );
   }
 
-  // ── Dialogs & bottom sheets ────────────────────────────────────────────────
+  // â”€â”€ Dialogs & bottom sheets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   void _showBloodTypePicker(BuildContext context, WidgetRef ref) {
     final bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -421,7 +438,7 @@ class _ProfileBody extends ConsumerWidget {
   }
 }
 
-// ── Profile header ────────────────────────────────────────────────────────────
+// â”€â”€ Profile header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _ProfileHeader extends ConsumerStatefulWidget {
   const _ProfileHeader({required this.profile});
@@ -633,7 +650,7 @@ class _ProfileHeaderState extends ConsumerState<_ProfileHeader> {
   }
 }
 
-// ── Large profile avatar ──────────────────────────────────────────────────────
+// â”€â”€ Large profile avatar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _LargeProfileAvatar extends StatelessWidget {
   const _LargeProfileAvatar({required this.name, this.photoUrl});
@@ -668,10 +685,10 @@ class _LargeProfileAvatar extends StatelessWidget {
   }
 }
 
-// ── Stats row ───────────────────────────────────────────────────────────
+// â”€â”€ Stats row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/// Blood Type / Donated / Requested counters — relocated here from the
-/// removed Requests bottom-nav tab (design spec §4.2).
+/// Blood Type / Donated / Requested counters â€” relocated here from the
+/// removed Requests bottom-nav tab (design spec Â§4.2).
 class _StatsRow extends ConsumerWidget {
   const _StatsRow({required this.profile});
 
@@ -687,7 +704,7 @@ class _StatsRow extends ConsumerWidget {
       children: [
         Expanded(
           child: StatTile(
-            value: profile.bloodGroup.isNotEmpty ? profile.bloodGroup : '—',
+            value: profile.bloodGroup.isNotEmpty ? profile.bloodGroup : 'â€”',
             caption: 'Blood Type',
             valueColor: context.colors.primary,
           ),
@@ -702,7 +719,7 @@ class _StatsRow extends ConsumerWidget {
         const SizedBox(width: 12),
         Expanded(
           child: StatTile(
-            value: requestCount ?? '—',
+            value: requestCount ?? 'â€”',
             caption: 'Requested',
           ),
         ),
@@ -711,7 +728,7 @@ class _StatsRow extends ConsumerWidget {
   }
 }
 
-// ── Section title ─────────────────────────────────────────────────────────────
+// â”€â”€ Section title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title});
@@ -733,7 +750,7 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-// ── Settings row ──────────────────────────────────────────────────────────────
+// â”€â”€ Settings row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
@@ -808,7 +825,7 @@ class _SettingsRow extends StatelessWidget {
   }
 }
 
-// ── Classification toggle row ─────────────────────────────────────────────────
+// â”€â”€ Classification toggle row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _ClassificationToggleRow extends ConsumerWidget {
   const _ClassificationToggleRow({required this.current});
@@ -821,46 +838,55 @@ class _ClassificationToggleRow extends ConsumerWidget {
     final isVolunteer = current == 'volunteer';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.people_outline, size: 22, color: colors.textMedium),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Classification',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: colors.textHigh,
+          // Label row
+          Row(
+            children: [
+              Icon(Icons.people_outline, size: 20, color: colors.textMedium),
+              const SizedBox(width: 10),
+              Text(
+                'Classification',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: colors.textHigh,
+                ),
               ),
-            ),
+            ],
           ),
-          // Segmented toggle
+          const SizedBox(height: 10),
+          // Full-width pill toggle
           Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               color: colors.surface,
               borderRadius: BorderRadius.circular(999),
               border: Border.all(color: colors.border, width: 1),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                _ToggleOption(
-                  label: 'Volunteer',
-                  selected: isVolunteer,
-                  onTap: () {
-                    ref.read(updateProfileFieldProvider)(
-                        {'donor_classification': 'volunteer'});
-                  },
+                Expanded(
+                  child: _ToggleOption(
+                    label: 'Volunteer',
+                    selected: isVolunteer,
+                    onTap: () {
+                      ref.read(updateProfileFieldProvider)(
+                          {'donor_classification': 'volunteer'});
+                    },
+                  ),
                 ),
-                _ToggleOption(
-                  label: 'Compensated',
-                  selected: !isVolunteer,
-                  onTap: () {
-                    ref.read(updateProfileFieldProvider)(
-                        {'donor_classification': 'compensated'});
-                  },
+                Expanded(
+                  child: _ToggleOption(
+                    label: 'Compensated',
+                    selected: !isVolunteer,
+                    onTap: () {
+                      ref.read(updateProfileFieldProvider)(
+                          {'donor_classification': 'compensated'});
+                    },
+                  ),
                 ),
               ],
             ),
@@ -890,15 +916,16 @@ class _ToggleOption extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? colors.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
         ),
+        alignment: Alignment.center,
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w600,
             color: selected ? Colors.white : colors.textMedium,
           ),
@@ -908,7 +935,7 @@ class _ToggleOption extends StatelessWidget {
   }
 }
 
-// ── Verification status row ───────────────────────────────────────────────────
+// â”€â”€ Verification status row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _VerificationStatusRow extends StatelessWidget {
   const _VerificationStatusRow({required this.isVerified});
@@ -948,7 +975,7 @@ class _VerificationStatusRow extends StatelessWidget {
                   Text(
                     isVerified
                         ? 'Verified'
-                        : 'Not verified — tap to submit',
+                        : 'Not verified â€” tap to submit',
                     style: TextStyle(
                       fontSize: 13,
                       color:
@@ -974,7 +1001,7 @@ class _VerificationStatusRow extends StatelessWidget {
   }
 }
 
-// ── Role switcher row (SegmentedButton) ──────────────────────────────────────
+// â”€â”€ Role switcher row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _RoleSwitcherRow extends ConsumerWidget {
   const _RoleSwitcherRow({required this.currentRole});
@@ -985,35 +1012,58 @@ class _RoleSwitcherRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final activeRole = ref.watch(activeRoleProvider);
+    final isSeeker = activeRole == 'seeker';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.swap_horiz, size: 22, color: colors.textMedium),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Account Role',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: colors.textHigh,
+          // Label row
+          Row(
+            children: [
+              Icon(Icons.swap_horiz, size: 20, color: colors.textMedium),
+              const SizedBox(width: 10),
+              Text(
+                'Account Role',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: colors.textHigh,
+                ),
               ),
-            ),
-          ),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'seeker', label: Text('Seeker')),
-              ButtonSegment(value: 'donor', label: Text('Donor')),
             ],
-            selected: {activeRole},
-            onSelectionChanged: (selected) {
-              ref.read(switchRoleActionProvider)(selected.first);
-            },
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          const SizedBox(height: 10),
+          // Full-width pill toggle
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: colors.border, width: 1),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _ToggleOption(
+                    label: 'Seeker',
+                    selected: isSeeker,
+                    onTap: () {
+                      ref.read(switchRoleActionProvider)('seeker');
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _ToggleOption(
+                    label: 'Donor',
+                    selected: !isSeeker,
+                    onTap: () {
+                      ref.read(switchRoleActionProvider)('donor');
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1022,7 +1072,7 @@ class _RoleSwitcherRow extends ConsumerWidget {
   }
 }
 
-// ── Logout row ────────────────────────────────────────────────────────────────
+// â”€â”€ Logout row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _LogoutRow extends ConsumerWidget {
   const _LogoutRow();
@@ -1054,7 +1104,7 @@ class _LogoutRow extends ConsumerWidget {
   }
 }
 
-// ── Delete account row ────────────────────────────────────────────────────────
+// â”€â”€ Delete account row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _DeleteAccountRow extends ConsumerWidget {
   const _DeleteAccountRow();
@@ -1110,7 +1160,7 @@ class _DeleteAccountRow extends ConsumerWidget {
   }
 }
 
-// ── Top donor badge ───────────────────────────────────────────────────────────
+// â”€â”€ Top donor badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _TopDonorBadge extends StatelessWidget {
   const _TopDonorBadge();

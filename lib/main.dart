@@ -8,16 +8,19 @@ import 'core/config/env_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'features/notifications/providers/notification_settings_provider.dart';
+import 'firebase_options.dart';
 import 'services/notifications/fcm_bootstrap.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Firebase Core is only needed for FCM push notifications.
-  // If google-services.json / GoogleService-Info.plist hasn't been
-  // configured yet, skip Firebase init — the rest of the app works fine.
+  // firebase_options.dart is derived from google-services.json /
+  // GoogleService-Info.plist; re-run `flutterfire configure` to regenerate.
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint('Firebase init skipped — FCM will be unavailable: $e');
   }

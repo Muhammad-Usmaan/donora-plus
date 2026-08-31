@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/auth_providers.dart';
+import '../../../services/providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -36,33 +39,114 @@ class ChatConversation {
     required String currentUserId,
   }) {
     // Determine which participant is the "other" user.
-    final p1 = map['participant_1_id'] as String?;
-    final p2 = map['participant_2_id'] as String?;
-    final otherId = p1 == currentUserId ? p2 : p1;
+    final p1Id = map['participant_1_id'] as String?;
+    final isUserP1 = p1Id == currentUserId;
+    final otherId = isUserP1 ? (map['participant_2_id'] as String?) : p1Id;
 
     // Joined profile data for the other user.
-    final profiles = map['profiles'] as Map<String, dynamic>? ??
+    final p1Profile = map['p1'] as Map<String, dynamic>?;
+    final p2Profile = map['p2'] as Map<String, dynamic>?;
+    final profiles = (isUserP1 ? p2Profile : p1Profile) ??
         map['other_profile'] as Map<String, dynamic>? ??
+        map['profiles'] as Map<String, dynamic>? ??
         {};
 
     // Last message (from a join or subquery).
-    final lastMsg = map['last_message'] as String?;
-    final lastMsgAt = map['last_message_at'] != null
+    var lastMsg = map['last_message'] as String?;
+    var lastMsgAt = map['last_message_at'] != null
         ? DateTime.tryParse(map['last_message_at'] as String)
         : null;
+    var unreadCount = map['unread_count'] as int? ?? 0;
+
+    final messagesList = (map['messages'] as List<dynamic>?)
+        ?.map((m) => m as Map<String, dynamic>)
+        .toList();
+
+    if (messagesList != null && messagesList.isNotEmpty) {
+      messagesList.sort((a, b) {
+        final aTime =
+            DateTime.tryParse(a['created_at'] as String? ?? '') ?? DateTime(1970);
+        final bTime =
+            DateTime.tryParse(b['created_at'] as String? ?? '') ?? DateTime(1970);
+        return bTime.compareTo(aTime);
+      });
+      lastMsg ??= messagesList.first['content'] as String?;
+      lastMsgAt ??=
+          DateTime.tryParse(messagesList.first['created_at'] as String? ?? '');
+
+      unreadCount = messagesList
+          .where((m) => m['sender_id'] != currentUserId && m['is_read'] == false)
+          .length;
+    }
 
     return ChatConversation(
       id: map['id'] as String? ?? '',
       otherUserId: otherId ?? '',
-      otherUserName: profiles['name'] as String? ?? 'Unknown',
+      otherUserName: profiles['name'] as String? ?? 'User',
       otherUserPhotoUrl: profiles['profile_photo_url'] as String?,
       otherUserIsVerified: profiles['is_verified'] as bool? ?? false,
       lastMessage: lastMsg,
       lastMessageAt: lastMsgAt,
-      unreadCount: map['unread_count'] as int? ?? 0,
+      unreadCount: unreadCount,
     );
   }
 }
+
+/// Public profile info for the other participant in a conversation.
+class OtherParticipantInfo {
+  const OtherParticipantInfo({
+    required this.id,
+    required this.name,
+    this.photoUrl,
+    this.isVerified = false,
+    this.phone,
+  });
+
+  final String id;
+  final String name;
+  final String? photoUrl;
+  final bool isVerified;
+  final String? phone;
+}
+
+/// Resolves the other participant's profile in a conversation given its ID.
+final conversationOtherParticipantProvider =
+    FutureProvider.family<OtherParticipantInfo?, String>(
+        (ref, conversationId) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null || conversationId.isEmpty) return null;
+
+  final client = ref.watch(supabaseClientProvider);
+  try {
+    final row = await client
+        .from('conversations')
+        .select('''
+          participant_1_id,
+          participant_2_id,
+          p1:profiles!participant_1_id(id, name, profile_photo_url, is_verified, phone),
+          p2:profiles!participant_2_id(id, name, profile_photo_url, is_verified, phone)
+        ''')
+        .eq('id', conversationId)
+        .maybeSingle();
+
+    if (row == null) return null;
+
+    final p1Id = row['participant_1_id'] as String?;
+    final isUserP1 = p1Id == user.id;
+    final otherProfile =
+        (isUserP1 ? row['p2'] : row['p1']) as Map<String, dynamic>? ?? {};
+
+    return OtherParticipantInfo(
+      id: (isUserP1 ? row['participant_2_id'] : p1Id) as String? ?? '',
+      name: otherProfile['name'] as String? ?? 'User',
+      photoUrl: otherProfile['profile_photo_url'] as String?,
+      isVerified: otherProfile['is_verified'] as bool? ?? false,
+      phone: otherProfile['phone'] as String?,
+    );
+  } catch (_) {
+    return null;
+  }
+});
 
 /// A single chat message.
 class ChatMessage {
@@ -110,9 +194,12 @@ final conversationsListProvider =
         .from('conversations')
         .select('''
           *,
-          other_profile:profiles!participant_2_id(id, name, profile_photo_url, is_verified)
+          p1:profiles!participant_1_id(id, name, profile_photo_url, is_verified),
+          p2:profiles!participant_2_id(id, name, profile_photo_url, is_verified),
+          messages(id, content, sender_id, is_read, created_at)
         ''')
         .or('participant_1_id.eq.${user.id},participant_2_id.eq.${user.id}')
+        .not('participant_2_id', 'is', null)
         .order('updated_at', ascending: false);
 
     return (data as List)
@@ -191,9 +278,60 @@ class SendMessageAction {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', conversationId);
 
+      // Notify the other participant via push.
+      unawaited(_notifyOtherParticipant(conversationId, user.id, content.trim()));
+
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Sends a push notification to the other conversation participant.
+  Future<void> _notifyOtherParticipant(
+    String conversationId,
+    String senderId,
+    String messagePreview,
+  ) async {
+    try {
+      final client = _ref.read(supabaseClientProvider);
+
+      // Find the other participant.
+      final convo = await client
+          .from('conversations')
+          .select('participant_1_id, participant_2_id')
+          .eq('id', conversationId)
+          .maybeSingle();
+      if (convo == null) return;
+
+      final p1 = convo['participant_1_id'] as String?;
+      final p2 = convo['participant_2_id'] as String?;
+      final otherId = p1 == senderId ? p2 : p1;
+      if (otherId == null) return;
+
+      // Fetch sender name for the notification body.
+      final senderProfile = await client
+          .from('profiles')
+          .select('name')
+          .eq('id', senderId)
+          .maybeSingle();
+      final senderName = senderProfile?['name'] as String? ?? 'Someone';
+
+      // Truncate the message for the notification body.
+      final preview = messagePreview.length > 60
+          ? '${messagePreview.substring(0, 60)}...'
+          : messagePreview;
+
+      final pushService = _ref.read(pushNotificationServiceProvider);
+      await pushService.send(
+        recipientId: otherId,
+        type: 'new_message',
+        title: senderName,
+        body: preview,
+        deepLinkId: conversationId,
+      );
+    } catch (_) {
+      // Non-critical.
     }
   }
 }

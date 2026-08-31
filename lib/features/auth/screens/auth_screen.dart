@@ -1,21 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
+import '../../../core/constants/app_constants.dart';
+import '../../../core/providers/auth_providers.dart';
+import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/primary_button.dart';
+import '../../../services/location/location_service.dart';
+import '../../../services/providers.dart';
 import '../providers/auth_form_provider.dart';
 
 /// Authentication screen with Log In / Sign Up segmented toggle.
 ///
 /// Log In: email-or-phone + password + forgot-password link.
-/// Sign Up: name + email + phone + password + confirm + role selector.
+/// Sign Up: name + email + phone + password + confirm + blood type + location + role + donor classification.
 ///
 /// Inline validation errors appear below each field in Urgent accent.
-/// Wired to Supabase Auth via [loginNotifierProvider] /
-/// [signupNotifierProvider]. Phone OTP can be added later without
-/// restructuring this widget.
+/// Wired to Supabase Auth via [loginNotifierProvider] / [signupNotifierProvider].
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
@@ -199,19 +207,25 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
     if (_serverError != null) setState(() => _serverError = null);
   }
 
+  bool _isSubmitting = false;
+
   Future<void> _submit() async {
+    if (_isSubmitting) return;
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _serverError = null);
-    await ref.read(loginNotifierProvider.notifier).submit(
-          widget.emailCtrl.text,
-          widget.passwordCtrl.text,
-        );
+    setState(() {
+      _serverError = null;
+      _isSubmitting = true;
+    });
+    await ref
+        .read(loginNotifierProvider.notifier)
+        .submit(widget.emailCtrl.text, widget.passwordCtrl.text);
     if (!mounted) return;
     final state = ref.read(loginNotifierProvider);
-    if (state.serverError != null) {
-      setState(() => _serverError = state.serverError);
-    }
+    setState(() {
+      _serverError = state.serverError;
+      _isSubmitting = false;
+    });
   }
 
   @override
@@ -239,7 +253,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
             onChanged: (_) => _clearServer(),
             decoration: const InputDecoration(
               labelText: 'Email or phone',
-              prefixIcon: Icon(Icons.alternate_email_outlined),
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.at),
             ),
             validator: (v) {
               final req = Validators.required(v, 'Email or phone');
@@ -257,12 +271,12 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
             onFieldSubmitted: (_) => _submit(),
             decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_outline),
+              prefixIcon: const PhosphorIcon(PhosphorIconsRegular.lockSimple),
               suffixIcon: IconButton(
-                icon: Icon(
+                icon: PhosphorIcon(
                   _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+                      ? PhosphorIconsRegular.eye
+                      : PhosphorIconsRegular.eyeClosed,
                   size: 20,
                 ),
                 onPressed: () =>
@@ -285,7 +299,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
           Center(
             child: TextButton(
               onPressed: () {
-                // TODO: Navigate to password-reset screen.
+                // Navigate to password-reset screen.
               },
               child: Text(
                 'Forgot password?',
@@ -326,49 +340,338 @@ class _SignupForm extends ConsumerStatefulWidget {
 
 class _SignupFormState extends ConsumerState<_SignupForm> {
   final _formKey = GlobalKey<FormState>();
+  final _phoneFocusNode = FocusNode();
   bool _obscurePw = true;
   bool _obscureConfirm = true;
-  String? _selectedRole; // 'seeker' | 'donor'
-  String? _serverError;
+  DateTime? _selectedBirthdate;
+  final _birthdateCtrl = TextEditingController();
 
-  /// Whether all required fields are non-empty and a role is selected.
+  // ── Location & Blood group ──────────────────────────────────────────
+  final _cityCtrl = TextEditingController();
+  double? _latitude;
+  double? _longitude;
+  bool _isLocating = false;
+  String? _selectedBloodGroup;
+
+  // ── Role & Donor Classification ─────────────────────────────────────
+  String? _selectedRole; // 'seeker' | 'donor'
+  String? _donorClassification; // 'volunteer' | 'compensated'
+
+  String? _serverError;
+  String? _phoneError;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneFocusNode.addListener(_onPhoneFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _phoneFocusNode.removeListener(_onPhoneFocusChange);
+    _phoneFocusNode.dispose();
+    _birthdateCtrl.dispose();
+    _cityCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onPhoneFocusChange() {
+    if (!_phoneFocusNode.hasFocus) {
+      _checkPhoneUniqueness();
+    }
+  }
+
+  /// Normalises raw phone input to Pakistan +92 format.
+  String _getNormalisedPhone(String raw) {
+    final digits = raw.trim().replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 11 && digits.startsWith('0')) {
+      return '+92${digits.substring(1)}';
+    } else if (digits.length == 12 && digits.startsWith('92')) {
+      return '+$digits';
+    } else if (digits.length == 13 && digits.startsWith('0092')) {
+      return '+${digits.substring(2)}';
+    } else if (digits.length == 10) {
+      return '+92$digits';
+    }
+    return raw.trim();
+  }
+
+  Future<void> _checkPhoneUniqueness() async {
+    final raw = widget.phoneCtrl.text.trim();
+    if (raw.isEmpty) return;
+    final valErr = Validators.phone(raw);
+    if (valErr != null) return;
+
+    final norm = _getNormalisedPhone(raw);
+    try {
+      final isTaken = await ref
+          .read(authServiceProvider)
+          .isPhoneRegistered(norm);
+      if (!mounted) return;
+      if (isTaken) {
+        setState(() {
+          _phoneError =
+              'This phone number is already registered with another account.';
+        });
+      } else if (_phoneError != null) {
+        setState(() => _phoneError = null);
+      }
+    } catch (_) {
+      // Best-effort check on blur; strict check happens on submit
+    }
+  }
+
+  /// Whether all required fields are non-empty, location & blood type set, and valid role selected.
   bool get _formReady {
-    return widget.nameCtrl.text.trim().isNotEmpty &&
+    final hasBasic =
+        widget.nameCtrl.text.trim().isNotEmpty &&
         widget.emailCtrl.text.trim().isNotEmpty &&
         widget.phoneCtrl.text.trim().isNotEmpty &&
+        _phoneError == null &&
+        _selectedBirthdate != null &&
+        _selectedBloodGroup != null &&
+        _cityCtrl.text.trim().isNotEmpty &&
         widget.passwordCtrl.text.isNotEmpty &&
         widget.confirmCtrl.text.isNotEmpty &&
         _selectedRole != null;
+
+    if (!hasBasic) return false;
+    if (_selectedRole == 'donor' && _donorClassification == null) return false;
+    return true;
   }
 
   void _clearServer() {
     if (_serverError != null) setState(() => _serverError = null);
   }
 
+  Future<void> _pickBirthdate() async {
+    FocusScope.of(context).unfocus();
+    final now = DateTime.now();
+    final initialDate =
+        _selectedBirthdate ?? DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1920),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedBirthdate = picked;
+        _birthdateCtrl.text = Formatters.dateShort(picked);
+        _clearServer();
+      });
+    }
+  }
+
+  // ── Location flows ──────────────────────────────────────────────────
+
+  Future<void> _useCurrentLocation() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isLocating = true;
+      _clearServer();
+    });
+
+    try {
+      final locationService = ref.read(locationServiceProvider);
+      final pos = await locationService.getCurrentPosition();
+      if (pos == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not access location. Please check permissions.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!LocationService.isInPakistan(pos.latitude, pos.longitude)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Location is outside Pakistan. Please select your city manually.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      final resolvedCity = await locationService.resolveCity(
+        pos.latitude,
+        pos.longitude,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _latitude = pos.latitude;
+        _longitude = pos.longitude;
+        if (resolvedCity != null && resolvedCity.isNotEmpty) {
+          _cityCtrl.text = resolvedCity;
+        } else {
+          _cityCtrl.text =
+              '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Location error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
+  }
+
+  Future<void> _pickFromMap() async {
+    FocusScope.of(context).unfocus();
+    _clearServer();
+    final result = await context.pushNamed<(LatLng, String?)>(
+      RouteNames.locationPicker,
+    );
+    if (result != null && mounted) {
+      final (position, address) = result;
+      final city =
+          address?.split(',').first.trim() ??
+          '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+        _cityCtrl.text = city;
+      });
+    }
+  }
+
+  // ── Donor Classification Modal Dialog ───────────────────────────────
+
+  void _showClassificationInfo(BuildContext context, String type) {
+    if (type == 'volunteer') {
+      showAppDialog(
+        context: context,
+        title: 'Volunteer Donor',
+        icon: PhosphorIconsRegular.heart,
+        iconColor: context.colors.primary,
+        message:
+            'Purely voluntary, non-remunerated donation.\n\nYou donate solely out of altruism to save lives without receiving any financial payment or reimbursement. Aligned with World Health Organization (WHO) standards for safe and ethical blood donation.',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      );
+    } else {
+      showAppDialog(
+        context: context,
+        title: 'Compensated (Travel & Time)',
+        icon: PhosphorIconsRegular.currencyCircleDollar,
+        iconColor: context.colors.secondary,
+        message:
+            'Reimbursement for travel, transport, and time expenses.\n\nThis option provides reimbursement strictly for direct, verified travel and time expenses incurred during the donation process. In accordance with WHO guidelines, this is NOT payment for the blood itself.',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      );
+    }
+  }
+
+  // ── Form Submission ─────────────────────────────────────────────────
+
+  bool _isSubmitting = false;
+
   Future<void> _submit() async {
+    if (_isSubmitting) return;
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedRole == null) return;
-    setState(() => _serverError = null);
+    if (_selectedRole == null ||
+        _selectedBirthdate == null ||
+        _selectedBloodGroup == null ||
+        _cityCtrl.text.trim().isEmpty) {
+      return;
+    }
+    if (_selectedRole == 'donor' && _donorClassification == null) {
+      setState(() => _serverError = 'Please select a donor classification.');
+      return;
+    }
 
-    await ref.read(signupNotifierProvider.notifier).submit(
+    setState(() {
+      _serverError = null;
+      _phoneError = null;
+      _isSubmitting = true;
+    });
+
+    final normalisedPhone = _getNormalisedPhone(widget.phoneCtrl.text);
+
+    // Pre-check phone uniqueness to show clear inline error
+    final isRegistered = await ref
+        .read(authServiceProvider)
+        .isPhoneRegistered(normalisedPhone);
+    if (isRegistered) {
+      if (!mounted) return;
+      setState(() {
+        _phoneError =
+            'This phone number is already registered with another account.';
+        _isSubmitting = false;
+      });
+      return;
+    }
+
+    // Default coordinates from city lookup if GPS was not used
+    var lat = _latitude;
+    var lng = _longitude;
+    if (lat == null || lng == null) {
+      final cityKey = _cityCtrl.text.trim().toLowerCase();
+      final coords = AppConstants.cityCoords[cityKey];
+      if (coords != null) {
+        lat = coords.lat;
+        lng = coords.lng;
+      }
+    }
+
+    await ref
+        .read(signupNotifierProvider.notifier)
+        .submit(
           email: widget.emailCtrl.text,
           password: widget.passwordCtrl.text,
           fullName: widget.nameCtrl.text,
           phone: widget.phoneCtrl.text,
+          birthdate: _selectedBirthdate!,
           role: _selectedRole!,
+          bloodGroup: _selectedBloodGroup!,
+          city: _cityCtrl.text.trim(),
+          latitude: lat,
+          longitude: lng,
+          donorClassification: _selectedRole == 'donor'
+              ? _donorClassification
+              : null,
         );
     if (!mounted) return;
     final state = ref.read(signupNotifierProvider);
-    if (state.serverError != null) {
-      setState(() => _serverError = state.serverError);
-    }
+    setState(() {
+      _serverError = state.serverError;
+      if (state.serverError != null &&
+          state.serverError!.contains('already registered')) {
+        _phoneError = state.serverError;
+      }
+      _isSubmitting = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final isLoading = ref.watch(signupNotifierProvider).isLoading;
+    final isLoading =
+        ref.watch(signupNotifierProvider).isLoading || _isSubmitting;
     final stateError = ref.watch(signupNotifierProvider).serverError;
     final signupSuccess = ref.watch(signupNotifierProvider).success;
     final displayError = _serverError ?? stateError;
@@ -379,16 +682,19 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const _SuccessBanner(
-            message: 'Account created! Check your email to confirm your account, then log in.',
+            message:
+                'Account created! Check your email to confirm your account, then log in.',
           ),
           const SizedBox(height: 24),
           Center(
             child: TextButton(
               onPressed: () {
-                // Switch parent to login tab
-                final authScreenState = context.findAncestorStateOfType<_AuthScreenState>();
+                final authScreenState = context
+                    .findAncestorStateOfType<_AuthScreenState>();
                 if (authScreenState != null) {
-                  authScreenState.setState(() => authScreenState._mode = AuthMode.login);
+                  authScreenState.setState(
+                    () => authScreenState._mode = AuthMode.login,
+                  );
                 }
               },
               child: Text(
@@ -425,7 +731,7 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
             },
             decoration: const InputDecoration(
               labelText: 'Full name',
-              prefixIcon: Icon(Icons.person_outline),
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.user),
             ),
             validator: (v) => Validators.required(v, 'Full name'),
           ),
@@ -442,7 +748,7 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
             },
             decoration: const InputDecoration(
               labelText: 'Email',
-              prefixIcon: Icon(Icons.alternate_email_outlined),
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.envelopeSimple),
             ),
             validator: Validators.email,
           ),
@@ -451,17 +757,159 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
           // ── Phone ───────────────────────────────────────────────
           TextFormField(
             controller: widget.phoneCtrl,
+            focusNode: _phoneFocusNode,
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
             onChanged: (_) {
               _clearServer();
+              if (_phoneError != null) setState(() => _phoneError = null);
               if (mounted) setState(() {});
             },
-            decoration: const InputDecoration(
-              labelText: 'Phone number',
-              prefixIcon: Icon(Icons.phone_outlined),
+            decoration: InputDecoration(
+              labelText: 'Phone number (e.g. 03001234567)',
+              prefixIcon: const PhosphorIcon(PhosphorIconsRegular.phone),
+              errorText: _phoneError,
             ),
-            validator: Validators.phone,
+            validator: (v) {
+              final err = Validators.phone(v);
+              if (err != null) return err;
+              if (_phoneError != null) return _phoneError;
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // ── Birthdate ───────────────────────────────────────────
+          TextFormField(
+            controller: _birthdateCtrl,
+            readOnly: true,
+            onTap: _pickBirthdate,
+            decoration: InputDecoration(
+              labelText: 'Date of birth',
+              prefixIcon: const PhosphorIcon(
+                PhosphorIconsRegular.calendarBlank,
+              ),
+              suffixIcon: IconButton(
+                icon: const PhosphorIcon(
+                  PhosphorIconsRegular.calendarBlank,
+                  size: 20,
+                ),
+                onPressed: _pickBirthdate,
+              ),
+            ),
+            validator: (v) {
+              if (_selectedBirthdate == null) {
+                return 'Please select your date of birth';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // ── Blood Type Dropdown ──────────────────────────────────
+          DropdownButtonFormField<String>(
+            value: _selectedBloodGroup,
+            decoration: const InputDecoration(
+              labelText: 'Blood type',
+              prefixIcon: PhosphorIcon(PhosphorIconsRegular.drop),
+            ),
+            items: AppConstants.bloodTypes.map((type) {
+              return DropdownMenuItem<String>(
+                value: type,
+                child: Text(
+                  type,
+                  style: context.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            }).toList(),
+            onChanged: (val) {
+              setState(() {
+                _selectedBloodGroup = val;
+                _clearServer();
+              });
+            },
+            validator: (v) => Validators.bloodType(v),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Location & City ─────────────────────────────────────
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _cityCtrl,
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.words,
+                onChanged: (_) {
+                  _clearServer();
+                  // Reset pinned coordinates if user edits text manually
+                  _latitude = null;
+                  _longitude = null;
+                  if (mounted) setState(() {});
+                },
+                decoration: InputDecoration(
+                  labelText: 'City / Location',
+                  prefixIcon: const PhosphorIcon(PhosphorIconsRegular.mapPin),
+                  suffixIcon: _isLocating
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : null,
+                ),
+                validator: (v) => Validators.required(v, 'Location'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isLocating ? null : _useCurrentLocation,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: const PhosphorIcon(
+                        PhosphorIconsRegular.navigationArrow,
+                        size: 16,
+                      ),
+                      label: const Text(
+                        'Use GPS',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickFromMap,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: const PhosphorIcon(
+                        PhosphorIconsRegular.mapPin,
+                        size: 16,
+                      ),
+                      label: const Text(
+                        'Pick on Map',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -476,20 +924,18 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
             },
             decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_outline),
+              prefixIcon: const PhosphorIcon(PhosphorIconsRegular.lockSimple),
               suffixIcon: IconButton(
-                icon: Icon(
+                icon: PhosphorIcon(
                   _obscurePw
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+                      ? PhosphorIconsRegular.eye
+                      : PhosphorIconsRegular.eyeClosed,
                   size: 20,
                 ),
-                onPressed: () =>
-                    setState(() => _obscurePw = !_obscurePw),
+                onPressed: () => setState(() => _obscurePw = !_obscurePw),
               ),
             ),
-            validator: (v) =>
-                Validators.minLength(v, 6, 'Password'),
+            validator: (v) => Validators.minLength(v, 6, 'Password'),
           ),
           const SizedBox(height: 16),
 
@@ -505,12 +951,12 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
             onFieldSubmitted: (_) => _submit(),
             decoration: InputDecoration(
               labelText: 'Confirm password',
-              prefixIcon: const Icon(Icons.lock_outline),
+              prefixIcon: const PhosphorIcon(PhosphorIconsRegular.lockSimple),
               suffixIcon: IconButton(
-                icon: Icon(
+                icon: PhosphorIcon(
                   _obscureConfirm
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+                      ? PhosphorIconsRegular.eye
+                      : PhosphorIconsRegular.eyeClosed,
                   size: 20,
                 ),
                 onPressed: () =>
@@ -519,24 +965,24 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'Please confirm your password';
-              if (v != widget.passwordCtrl.text) return 'Passwords do not match';
+              if (v != widget.passwordCtrl.text) {
+                return 'Passwords do not match';
+              }
               return null;
             },
           ),
           const SizedBox(height: 24),
 
           // ── Role selector ───────────────────────────────────────
-          Text(
-            'I am a\u2026',
-            style: context.textTheme.titleMedium,
-          ),
+          Text('I am joining as\u2026', style: context.textTheme.titleMedium),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _RoleCard(
-                  icon: Icons.search,
+                  icon: PhosphorIconsRegular.magnifyingGlass,
                   title: 'I need blood',
+                  subtitle: 'Seeker',
                   isSelected: _selectedRole == 'seeker',
                   color: colors.urgent,
                   onTap: () {
@@ -548,8 +994,9 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
               const SizedBox(width: 12),
               Expanded(
                 child: _RoleCard(
-                  icon: Icons.favorite_border,
+                  icon: PhosphorIconsRegular.heart,
                   title: 'I want to donate',
+                  subtitle: 'Donor',
                   isSelected: _selectedRole == 'donor',
                   color: colors.secondary,
                   onTap: () {
@@ -567,7 +1014,46 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
               style: context.textTheme.bodySmall,
             ),
           ),
-          const SizedBox(height: 24),
+
+          // ── Donor Classification step (Visible ONLY when role == 'donor') ──
+          if (_selectedRole == 'donor') ...[
+            const SizedBox(height: 24),
+            Text('Donor Classification', style: context.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Select your donation preference (WHO-aligned):',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.textMedium,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ClassificationCard(
+              title: 'Volunteer',
+              description: 'No reimbursement, purely voluntary donation',
+              icon: PhosphorIconsRegular.heartStraight,
+              isSelected: _donorClassification == 'volunteer',
+              color: colors.primary,
+              onTap: () {
+                setState(() => _donorClassification = 'volunteer');
+              },
+              onInfoTap: () => _showClassificationInfo(context, 'volunteer'),
+            ),
+            const SizedBox(height: 10),
+            _ClassificationCard(
+              title: 'Compensated',
+              description:
+                  'Reimbursed for travel/time (not payment for blood itself)',
+              icon: PhosphorIconsRegular.currencyCircleDollar,
+              isSelected: _donorClassification == 'compensated',
+              color: colors.secondary,
+              onTap: () {
+                setState(() => _donorClassification = 'compensated');
+              },
+              onInfoTap: () => _showClassificationInfo(context, 'compensated'),
+            ),
+          ],
+
+          const SizedBox(height: 28),
 
           // ── Submit ──────────────────────────────────────────────
           _formReady
@@ -594,6 +1080,7 @@ class _RoleCard extends StatelessWidget {
   const _RoleCard({
     required this.icon,
     required this.title,
+    this.subtitle,
     required this.isSelected,
     required this.color,
     required this.onTap,
@@ -601,6 +1088,7 @@ class _RoleCard extends StatelessWidget {
 
   final IconData icon;
   final String title;
+  final String? subtitle;
   final bool isSelected;
   final Color color;
   final VoidCallback onTap;
@@ -609,18 +1097,129 @@ class _RoleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       borderColor: isSelected ? color : null,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 32, color: isSelected ? color : context.colors.textMedium),
+          Icon(
+            icon,
+            size: 30,
+            color: isSelected ? color : context.colors.textMedium,
+          ),
           const SizedBox(height: 8),
           Text(
             title,
             textAlign: TextAlign.center,
             style: context.textTheme.labelLarge?.copyWith(
               color: isSelected ? color : context.colors.textMedium,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              textAlign: TextAlign.center,
+              style: context.textTheme.bodySmall?.copyWith(
+                color: isSelected
+                    ? color.withValues(alpha: 0.8)
+                    : context.colors.textMedium,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Classification card (Volunteer / Compensated)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _ClassificationCard extends StatelessWidget {
+  const _ClassificationCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.isSelected,
+    required this.color,
+    required this.onTap,
+    required this.onInfoTap,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+  final bool isSelected;
+  final Color color;
+  final VoidCallback onTap;
+  final VoidCallback onInfoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return AppCard(
+      borderColor: isSelected ? color : null,
+      padding: const EdgeInsets.all(14),
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (isSelected ? color : colors.textMedium).withValues(
+                alpha: 0.1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 22,
+              color: isSelected ? color : colors.textMedium,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      title,
+                      style: context.textTheme.labelLarge?.copyWith(
+                        color: isSelected ? color : colors.textHigh,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: PhosphorIcon(
+                        PhosphorIconsRegular.info,
+                        size: 18,
+                        color: colors.textMedium,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Learn more',
+                      onPressed: onInfoTap,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -655,7 +1254,11 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, size: 20, color: colors.urgent),
+          PhosphorIcon(
+            PhosphorIconsRegular.warning,
+            size: 20,
+            color: colors.urgent,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -694,7 +1297,11 @@ class _SuccessBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle_outline, size: 20, color: colors.primary),
+          PhosphorIcon(
+            PhosphorIconsRegular.checkCircle,
+            size: 20,
+            color: colors.primary,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

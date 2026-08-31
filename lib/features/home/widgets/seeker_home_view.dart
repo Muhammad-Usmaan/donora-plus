@@ -7,10 +7,13 @@ import '../../../core/constants/request_reasons.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/map_utils.dart';
+import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/reason_pill.dart';
 import '../../../core/widgets/urgent_request_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
+import '../../chatbot/widgets/ask_donora_ai_card.dart';
 import '../providers/home_providers.dart';
 
 /// Seeker home view — urgent CTA, nearby verified donors, active requests.
@@ -98,76 +101,11 @@ class SeekerHomeView extends ConsumerWidget {
           const SizedBox(height: 16),
 
           // ── Ask Donora AI ──────────────────────────────────────
-          // Single entry point to the AI assistant — teal tint so it
-          // reads as secondary to the solid-red hero CTA above it.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: GestureDetector(
-              onTap: () => context.pushNamed(RouteNames.chatbot),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: context.colors.secondaryContainer,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: context.colors.secondary
-                            .withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: PhosphorIcon(
-                        PhosphorIconsRegular.sparkle,
-                        color: context.colors.secondary,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Ask Donora AI',
-                            style: context.textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Get quick answers about donating or '
-                            'requesting blood.',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.textTheme.bodySmall?.copyWith(
-                              color: context.colors.textMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    PhosphorIcon(
-                      PhosphorIconsRegular.caretRight,
-                      color: context.colors.secondary,
-                      size: 20,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          const AskDonoraAiCard(),
           const SizedBox(height: 24),
+
+          // ── Donation in Progress (seeker only, hidden when empty) ─
+          const _DonationInProgressSection(),
 
           // ── Nearby Verified Donors ────────────────────────────────
           _SectionHeader(
@@ -251,7 +189,7 @@ class _NearbyDonorsRow extends ConsumerWidget {
 
     return donorsAsync.when(
       loading: () => const SizedBox(
-        height: 140,
+        height: 195,
         child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       error: (e, _) {
@@ -286,10 +224,10 @@ class _NearbyDonorsRow extends ConsumerWidget {
         }
 
         return SizedBox(
-          height: 140,
+          height: 195,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             itemCount: donors.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (_, i) => _DonorCard(
@@ -307,12 +245,28 @@ class _DonorCard extends StatelessWidget {
 
   final Map<String, dynamic> donor;
 
+  String _getInitials(String name) {
+    final words = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2);
+    if (words.isEmpty) return '?';
+    return words.map((w) => w[0].toUpperCase()).join();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final name = donor['name'] as String? ?? 'Donor';
     final bloodGroup = donor['blood_group'] as String? ?? '';
     final city = donor['city'] as String? ?? '';
+    final photoUrl = donor['profile_photo_url'] as String?;
+    final isVerified = donor['is_verified'] == true;
+    final isTopDonor = donor['is_top_donor'] == true;
+    final classification =
+        donor['donor_classification'] as String? ?? 'volunteer';
+    final isVolunteer = classification == 'volunteer';
 
     return GestureDetector(
       onTap: () => context.pushNamed(
@@ -320,66 +274,278 @@ class _DonorCard extends StatelessWidget {
         pathParameters: {'id': donor['id'] as String? ?? ''},
       ),
       child: Container(
-        width: 130,
+        width: 156,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: colors.card,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: colors.border.withValues(alpha: 0.8),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Photo placeholder
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: colors.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.person,
-                size: 22,
-                color: colors.primary,
-              ),
-            ),
-            const SizedBox(height: 8),
+            // Top row: Blood type pill + Top Donor / Verified badge
             Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(
-                  child: Text(
-                    name.split(' ').first,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.textTheme.labelLarge,
-                  ),
-                ),
-                if (donor['is_verified'] == true) ...[
-                  const SizedBox(width: 2),
-                  const VerifiedBadge(compact: true),
-                ],
+                if (bloodGroup.isNotEmpty)
+                  BloodTypeChip(bloodType: bloodGroup, compact: true)
+                else
+                  const SizedBox(width: 16),
+                if (isTopDonor)
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E1),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFF9A825).withValues(alpha: 0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.star,
+                      size: 13,
+                      color: Color(0xFFF9A825),
+                    ),
+                  )
+                else if (isVerified)
+                  const VerifiedBadge(compact: true)
+                else
+                  const SizedBox(width: 16),
               ],
             ),
-            const SizedBox(height: 4),
-            if (bloodGroup.isNotEmpty)
-              BloodTypeChip(bloodType: bloodGroup)
-            else
-              Text(
-                city,
-                style: context.textTheme.bodySmall,
-                overflow: TextOverflow.ellipsis,
+            const SizedBox(height: 6),
+
+            // Avatar with online / verified green indicator dot
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colors.primaryContainer,
+                    border: Border.all(
+                      color: colors.primary.withValues(alpha: 0.2),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: (photoUrl != null && photoUrl.isNotEmpty)
+                        ? Image.network(
+                            photoUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Center(
+                              child: Text(
+                                _getInitials(name),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: colors.primary,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              _getInitials(name),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: colors.primary,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 13,
+                    height: 13,
+                    decoration: BoxDecoration(
+                      color: colors.success,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.card, width: 2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Name
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: context.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
               ),
+            ),
+            const SizedBox(height: 2),
+
+            // City / Location
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  size: 12,
+                  color: colors.textMedium,
+                ),
+                const SizedBox(width: 2),
+                Flexible(
+                  child: Text(
+                    city.isNotEmpty ? city : 'Pakistan',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.textTheme.bodySmall?.copyWith(
+                      color: colors.textMedium,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+
+            // Classification pill
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: (isVolunteer ? colors.volunteer : colors.compensated)
+                    .withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isVolunteer ? Icons.favorite : Icons.directions_walk,
+                    size: 10.5,
+                    color: isVolunteer ? colors.volunteer : colors.compensated,
+                  ),
+                  const SizedBox(width: 3.5),
+                  Text(
+                    isVolunteer ? 'Volunteer' : 'Compensated',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isVolunteer
+                          ? colors.volunteer
+                          : colors.compensated,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Expiry label — "Expires in Xh" for urgent, "Needed by [date]" for planned
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _ExpiryLabel extends StatelessWidget {
+  const _ExpiryLabel({
+    required this.expiresAt,
+    required this.isUrgent,
+    this.plannedDate,
+  });
+
+  final DateTime? expiresAt;
+  final bool isUrgent;
+  final DateTime? plannedDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    if (!isUrgent && plannedDate != null) {
+      // Planned: show "Needed by [date]"
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: colors.secondaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.event_outlined, size: 12, color: colors.secondary),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                Formatters.neededBy(plannedDate!),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colors.secondary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isUrgent && expiresAt != null) {
+      // Urgent: show countdown
+      final countdown = Formatters.expiresCountdown(expiresAt!);
+      final isLow = expiresAt!.difference(DateTime.now()).inHours < 6;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isLow
+              ? colors.urgentContainer
+              : colors.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isLow ? Icons.warning_amber_rounded : Icons.schedule,
+              size: 12,
+              color: isLow ? colors.urgent : colors.primary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              countdown,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isLow ? colors.urgent : colors.primary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
 
@@ -432,7 +598,10 @@ class _ActiveRequestsList extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: requests
-                .map((r) => _ActiveRequestCard(request: r))
+                .map((r) => _ActiveRequestCard(
+                      key: ValueKey(r['id'] as String? ?? ''),
+                      request: r,
+                    ))
                 .toList(),
           ),
         );
@@ -442,7 +611,7 @@ class _ActiveRequestsList extends ConsumerWidget {
 }
 
 class _ActiveRequestCard extends ConsumerWidget {
-  const _ActiveRequestCard({required this.request});
+  const _ActiveRequestCard({super.key, required this.request});
 
   final Map<String, dynamic> request;
 
@@ -452,10 +621,16 @@ class _ActiveRequestCard extends ConsumerWidget {
     final requestId = request['id'] as String? ?? '';
     final bloodGroup = request['blood_group'] as String? ?? '';
     final city = request['city'] as String? ?? '';
+    final hospitalName = request['hospital_name'] as String? ?? '';
+    final patientName = request['patient_name'] as String? ?? '';
     final isUrgent = request['is_urgent'] as bool? ?? false;
     final units = request['units_needed'] as int? ?? 1;
     final createdAt =
         DateTime.tryParse(request['created_at'] as String? ?? '');
+    final expiresAt =
+        DateTime.tryParse(request['expires_at'] as String? ?? '');
+    final plannedDate =
+        DateTime.tryParse(request['planned_date'] as String? ?? '');
     final reason = RequestReason.fromValue(request['reason'] as String?);
 
     // Live responder count — falls back to 0 while loading.
@@ -484,11 +659,10 @@ class _ActiveRequestCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Blood type + units + urgency.
+            // Blood type + units + urgency / expiry label.
             Row(
               children: [
-                if (bloodGroup.isNotEmpty)
-                  BloodTypeChip(bloodType: bloodGroup),
+                if (bloodGroup.isNotEmpty) BloodTypeChip(bloodType: bloodGroup),
                 const SizedBox(width: 8),
                 Text(
                   '$units unit${units == 1 ? '' : 's'}',
@@ -496,30 +670,78 @@ class _ActiveRequestCard extends ConsumerWidget {
                       ?.copyWith(color: colors.textMedium),
                 ),
                 const Spacer(),
-                if (isUrgent) const UrgentRequestBadge(compact: true),
+                if (isUrgent && expiresAt != null)
+                  _ExpiryLabel(expiresAt: expiresAt, isUrgent: true)
+                else if (!isUrgent && plannedDate != null)
+                  _ExpiryLabel(expiresAt: expiresAt, isUrgent: false, plannedDate: plannedDate)
+                else if (isUrgent)
+                  const UrgentRequestBadge(compact: true),
               ],
             ),
-            const SizedBox(height: 12),
 
-            // Location.
-            Row(
-              children: [
-                PhosphorIcon(
-                  PhosphorIconsRegular.mapPin,
-                  size: 16,
-                  color: colors.textMedium,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    city.isEmpty ? 'City not set' : city,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.textTheme.titleMedium,
+            // Patient name (if available)
+            if (patientName.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.favorite_border, size: 13, color: colors.textMedium),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Patient: $patientName',
+                    style: context.textTheme.bodySmall?.copyWith(
+                      color: colors.textMedium,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+
+            // Location (tappable).
+            GestureDetector(
+              onTap: () {
+                final lat = request['latitude'] as double?;
+                final lng = request['longitude'] as double?;
+                final loc = hospitalName.isNotEmpty ? '$hospitalName, $city' : city;
+                
+                if (lat != null && lng != null) {
+                  MapUtils.openPlaceMarker(
+                    lat, 
+                    lng, 
+                    label: hospitalName.isNotEmpty ? hospitalName : city,
+                  );
+                } else if (loc.isNotEmpty) {
+                  MapUtils.openNavigationByName(loc);
+                }
+              },
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 16,
+                    color: colors.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      hospitalName.isNotEmpty
+                          ? '$hospitalName, $city'
+                          : city.isEmpty
+                              ? 'City not set'
+                              : city,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.textTheme.titleMedium?.copyWith(
+                        color: colors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.open_in_new, size: 13, color: colors.primary),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
             // Reason pill + posted time.
             Row(
@@ -534,7 +756,7 @@ class _ActiveRequestCard extends ConsumerWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
             // Responders + navigation hint.
             Row(
@@ -556,6 +778,147 @@ class _ActiveRequestCard extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Donation in Progress — shown only when seeker has accepted requests
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _DonationInProgressSection extends ConsumerWidget {
+  const _DonationInProgressSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final donationsAsync = ref.watch(inProgressDonationsProvider);
+
+    return donationsAsync.when(
+      data: (donations) {
+        if (donations.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionHeader(title: 'Donation in Progress'),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: donations
+                    .map((r) => _DonationInProgressCard(
+                          key: ValueKey(r['id'] as String? ?? ''),
+                          request: r,
+                        ))
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _DonationInProgressCard extends StatelessWidget {
+  const _DonationInProgressCard({super.key, required this.request});
+
+  final Map<String, dynamic> request;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final requestId = request['id'] as String? ?? '';
+    final bloodGroup = request['blood_group'] as String? ?? '';
+    final isUrgent = request['is_urgent'] as bool? ?? false;
+    final donor = request['matched_donor'] as Map<String, dynamic>?;
+    final donorName = donor?['name'] as String? ?? 'Donor';
+    final donorBloodGroup = donor?['blood_group'] as String? ?? '';
+
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      onTap: () => context.pushNamed(
+        RouteNames.requestDetail,
+        pathParameters: {'id': requestId},
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: blood type + urgency badge
+          Row(
+            children: [
+              if (bloodGroup.isNotEmpty) BloodTypeChip(bloodType: bloodGroup),
+              const SizedBox(width: 8),
+              if (isUrgent)
+                const UrgentRequestBadge(compact: true)
+              else
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colors.secondaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.event_outlined,
+                          size: 12, color: colors.secondary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Planned',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: colors.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const Spacer(),
+              Icon(Icons.chevron_right,
+                  size: 20, color: colors.textMedium),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Matched donor info
+          Row(
+            children: [
+              Icon(Icons.handshake_outlined,
+                  size: 16, color: colors.success),
+              const SizedBox(width: 8),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: context.textTheme.bodyMedium,
+                    children: [
+                      const TextSpan(text: 'Matched with '),
+                      TextSpan(
+                        text: donorName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      if (donorBloodGroup.isNotEmpty)
+                        TextSpan(
+                          text: ' \u2022 $donorBloodGroup',
+                          style: TextStyle(
+                            color: colors.textMedium,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

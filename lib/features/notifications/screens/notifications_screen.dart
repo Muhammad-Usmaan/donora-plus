@@ -252,11 +252,24 @@ class _NotificationCard extends ConsumerWidget {
 
     switch (notification.type) {
       case NotificationType.urgentRequest:
+      case NotificationType.newRequest:
         if (linkId != null) {
           context.pushNamed(
             RouteNames.requestDetail,
             pathParameters: {'id': linkId},
           );
+        }
+        break;
+      case NotificationType.requestAccepted:
+      case NotificationType.requestFulfilled:
+      case NotificationType.requestExpired:
+        if (linkId != null) {
+          context.pushNamed(
+            RouteNames.requestDetail,
+            pathParameters: {'id': linkId},
+          );
+        } else {
+          context.pushNamed(RouteNames.myRequests);
         }
         break;
       case NotificationType.newMessage:
@@ -299,9 +312,17 @@ class _NotificationIcon extends StatelessWidget {
 
     switch (type) {
       case NotificationType.urgentRequest:
+      case NotificationType.newRequest:
         bgColor = colors.urgentContainer;
         iconColor = colors.urgent;
         icon = Icons.bloodtype;
+        break;
+      case NotificationType.requestAccepted:
+      case NotificationType.requestFulfilled:
+      case NotificationType.requestExpired:
+        bgColor = const Color(0xFFE3F2FD);
+        iconColor = colors.primary;
+        icon = Icons.handshake_outlined;
         break;
       case NotificationType.verificationApproved:
         bgColor = const Color(0xFFE8F5E9);

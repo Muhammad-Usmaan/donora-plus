@@ -10,10 +10,15 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../../../services/location/location_service.dart';
+import '../../../services/providers.dart';
 import '../../home/providers/home_providers.dart' show normalizePhone;
 import '../providers/profile_providers.dart';
 
@@ -282,6 +287,7 @@ class _CityDialogState extends State<_CityDialog> {
   late final TextEditingController _controller;
   String? _error;
   bool _saving = false;
+  bool _locating = false;
 
   @override
   void initState() {
@@ -293,6 +299,61 @@ class _CityDialogState extends State<_CityDialog> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _useCurrentLocation() async {
+    setState(() {
+      _locating = true;
+      _error = null;
+    });
+
+    try {
+      final locationService = widget.ref.read(locationServiceProvider);
+      final pos = await locationService.getCurrentPosition();
+      if (pos == null) {
+        if (mounted) {
+          setState(() => _error = 'Could not access location. Please check permissions.');
+        }
+        return;
+      }
+
+      if (!LocationService.isInPakistan(pos.latitude, pos.longitude)) {
+        if (mounted) {
+          setState(() => _error = 'Location is outside Pakistan.');
+        }
+        return;
+      }
+
+      final city = await locationService.resolveCity(pos.latitude, pos.longitude);
+      if (mounted) {
+        if (city != null && city.isNotEmpty) {
+          _controller.text = city;
+        } else {
+          final addr = '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
+          _controller.text = addr;
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Location error: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _locating = false);
+      }
+    }
+  }
+
+  Future<void> _pickFromMap() async {
+    final result = await context.pushNamed<(LatLng, String?)>(
+      RouteNames.locationPicker,
+    );
+    if (result != null && mounted) {
+      final (position, address) = result;
+      final city = address?.split(',').first.trim() ??
+          '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+      _controller.text = city;
+    }
   }
 
   Future<void> _save() async {
@@ -322,29 +383,75 @@ class _CityDialogState extends State<_CityDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return AppDialog(
       title: 'City / Location',
       message: 'Shown on your profile and used to find nearby matches.',
       icon: Icons.location_city,
-      iconColor: context.colors.secondary,
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.words,
-        maxLength: 60,
-        enabled: !_saving,
-        onChanged: (_) => setState(() => _error = null),
-        decoration: InputDecoration(
-          labelText: 'City',
-          hintText: 'Enter your city',
-          counterText: '',
-          errorText: _error,
-          prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
-        ),
+      iconColor: colors.secondary,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: false,
+            textCapitalization: TextCapitalization.words,
+            maxLength: 60,
+            enabled: !_saving && !_locating,
+            onChanged: (_) => setState(() => _error = null),
+            decoration: InputDecoration(
+              labelText: 'City',
+              hintText: 'Enter your city',
+              counterText: '',
+              errorText: _error,
+              prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: (_saving || _locating) ? null : _useCurrentLocation,
+                  icon: _locating
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location, size: 16),
+                  label: Text(
+                    _locating ? 'Locating...' : 'Current Location',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: (_saving || _locating) ? null : _pickFromMap,
+                  icon: const Icon(Icons.map_outlined, size: 16),
+                  label: const Text(
+                    'Pick on Map',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       actions: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          onPressed: (_saving || _locating) ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         DialogActionButton(

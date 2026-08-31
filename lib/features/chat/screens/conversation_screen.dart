@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/providers/auth_providers.dart';
 import '../../../core/utils/extensions.dart';
@@ -109,10 +110,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           onPressed: () => context.pop(),
         ),
         title: _AppBarTitle(
+          conversationId: widget.conversationId,
           name: widget.otherUserName,
           photoUrl: widget.otherUserPhotoUrl,
           isVerified: widget.otherUserIsVerified,
         ),
+        actions: [
+          _CallButton(conversationId: widget.conversationId),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
@@ -131,18 +137,15 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                         final msg = messages[index];
                         final isOutgoing = msg.senderId == currentUserId;
 
-                        // Show timestamp if this is the first message
-                        // or if there's a >5 min gap from the previous one.
-                        final showTimestamp = index == 0 ||
-                            msg.createdAt
-                                    .difference(messages[index - 1].createdAt)
-                                    .inMinutes >
-                                5;
+                        // Show date separator if first message or >30 min gap / day change.
+                        final showDateHeader = index == 0 ||
+                            msg.createdAt.toLocal().day !=
+                                messages[index - 1].createdAt.toLocal().day;
 
                         return _MessageBubble(
                           message: msg,
                           isOutgoing: isOutgoing,
-                          showTimestamp: showTimestamp,
+                          showDateHeader: showDateHeader,
                         );
                       },
                     ),
@@ -177,30 +180,47 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
 // ── App bar title ─────────────────────────────────────────────────────────────
 
-class _AppBarTitle extends StatelessWidget {
+class _AppBarTitle extends ConsumerWidget {
   const _AppBarTitle({
+    required this.conversationId,
     required this.isVerified,
     this.name,
     this.photoUrl,
   });
 
+  final String conversationId;
   final String? name;
   final String? photoUrl;
   final bool isVerified;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
-    final displayName = name ?? 'Conversation';
+    final otherInfo = ref
+        .watch(conversationOtherParticipantProvider(conversationId))
+        .valueOrNull;
+
+    final displayName = (name != null && name!.isNotEmpty && name != 'null')
+        ? name!
+        : (otherInfo != null && otherInfo.name.isNotEmpty
+            ? otherInfo.name
+            : 'Conversation');
+
+    final displayPhoto =
+        (photoUrl != null && photoUrl!.isNotEmpty && photoUrl != 'null')
+            ? photoUrl
+            : otherInfo?.photoUrl;
+
+    final displayVerified = isVerified || (otherInfo?.isVerified ?? false);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Small avatar
-        photoUrl != null && photoUrl!.isNotEmpty
+        displayPhoto != null && displayPhoto.isNotEmpty
             ? CircleAvatar(
                 radius: 16,
-                backgroundImage: NetworkImage(photoUrl!),
+                backgroundImage: NetworkImage(displayPhoto),
                 backgroundColor: colors.primaryContainer,
               )
             : CircleAvatar(
@@ -237,7 +257,7 @@ class _AppBarTitle extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (isVerified) ...[
+                if (displayVerified) ...[
                   const SizedBox(width: 4),
                   const VerifiedBadge(compact: true),
                 ],
@@ -257,34 +277,79 @@ class _AppBarTitle extends StatelessWidget {
   }
 }
 
+// ── Call button ───────────────────────────────────────────────────────────────
+
+class _CallButton extends ConsumerWidget {
+  const _CallButton({required this.conversationId});
+
+  final String conversationId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final otherInfo = ref
+        .watch(conversationOtherParticipantProvider(conversationId))
+        .valueOrNull;
+
+    final phone = otherInfo?.phone;
+    if (phone == null || phone.isEmpty) return const SizedBox.shrink();
+
+    return IconButton(
+      icon: Icon(Icons.phone_outlined, color: context.colors.primary),
+      onPressed: () async {
+        final uri = Uri.parse('tel:$phone');
+        try {
+          if (!await launchUrl(uri)) {
+            if (context.mounted) {
+              context.showSnackBar('No dialer app available to place the call.', isError: true);
+            }
+          }
+        } catch (e) {
+          if (context.mounted) {
+            context.showSnackBar('No dialer app available to place the call.', isError: true);
+          }
+        }
+      },
+    );
+  }
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.isOutgoing,
-    required this.showTimestamp,
+    required this.showDateHeader,
   });
 
   final ChatMessage message;
   final bool isOutgoing;
-  final bool showTimestamp;
+  final bool showDateHeader;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final localTime = message.createdAt.toLocal();
 
     return Column(
       children: [
-        // Time gap label
-        if (showTimestamp) ...[
+        // Date gap label
+        if (showDateHeader) ...[
           const SizedBox(height: 12),
-          Text(
-            _formatTimestamp(message.createdAt),
-            style: TextStyle(
-              fontSize: 11,
-              color: colors.textMedium,
-              fontWeight: FontWeight.w500,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: colors.card,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: colors.border.withValues(alpha: 0.6)),
+            ),
+            child: Text(
+              _formatDateHeader(localTime),
+              style: TextStyle(
+                fontSize: 11,
+                color: colors.textMedium,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -298,14 +363,12 @@ class _MessageBubble extends StatelessWidget {
               isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.72,
+              maxWidth: MediaQuery.of(context).size.width * 0.76,
+              minWidth: 70,
             ),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
             decoration: BoxDecoration(
-              color: isOutgoing
-                  ? colors.primaryContainer
-                  : colors.card,
+              color: isOutgoing ? colors.primaryContainer : colors.card,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
@@ -316,13 +379,45 @@ class _MessageBubble extends StatelessWidget {
                   ? null
                   : Border.all(color: colors.border, width: 1),
             ),
-            child: Text(
-              message.content,
-              style: TextStyle(
-                fontSize: 14,
-                color: colors.textHigh,
-                height: 1.45,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message.content,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: colors.textHigh,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const SizedBox(width: 24),
+                    Text(
+                      _formatTime(localTime),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: colors.textMedium.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (isOutgoing) ...[
+                      const SizedBox(width: 3),
+                      Icon(
+                        message.isRead ? Icons.done_all : Icons.done,
+                        size: 13,
+                        color: message.isRead
+                            ? colors.primary
+                            : colors.textMedium.withValues(alpha: 0.7),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -330,21 +425,41 @@ class _MessageBubble extends StatelessWidget {
     );
   }
 
-  /// "10:32 AM" for today, "Mon 10:32 AM" for older messages.
-  String _formatTimestamp(DateTime dt) {
+  /// Formats time as "10:32 AM" in the user's local timezone.
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  /// Formats date headers: "Today", "Yesterday", or "Mon, Aug 30".
+  String _formatDateHeader(DateTime dt) {
     final now = DateTime.now();
-    final isToday =
-        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dt.year, dt.month, dt.day);
 
-    final time =
-        '${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}'
-        ':${dt.minute.toString().padLeft(2, '0')} '
-        '${dt.hour >= 12 ? 'PM' : 'AM'}';
-
-    if (isToday) return time;
+    if (messageDate == today) return 'Today';
+    if (messageDate == today.subtract(const Duration(days: 1))) {
+      return 'Yesterday';
+    }
 
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return '${weekdays[dt.weekday - 1]} $time';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${weekdays[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}';
   }
 }
 

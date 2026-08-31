@@ -60,6 +60,16 @@ class SupabaseAuthService {
     await _client.auth.signOut();
   }
 
+  /// Checks whether a phone number is already associated with an account.
+  Future<bool> isPhoneRegistered(String phone) async {
+    final res = await _client.rpc(
+      'is_phone_registered',
+      params: {'check_phone': phone},
+    );
+    if (res is bool) return res;
+    return false;
+  }
+
   /// The currently authenticated user, or null if not signed in.
   User? get currentUser => _client.auth.currentUser;
 

@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/map_utils.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/donor_status_chip.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -13,6 +16,7 @@ import '../../../core/widgets/reason_pill.dart';
 import '../../../core/widgets/secondary_button.dart';
 import '../../../core/widgets/urgent_request_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
+import '../../chat/providers/chat_providers.dart';
 import '../providers/request_detail_provider.dart';
 
 /// Detail view for a single blood request, including donor responses.
@@ -92,12 +96,31 @@ class _RequestBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final isRequester = currentUser?.id == request.requesterId;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        _RequestSummaryCard(request: request, requestId: requestId),
+        _RequestSummaryCard(
+          request: request,
+          requestId: requestId,
+          isRequester: isRequester,
+        ),
         const SizedBox(height: 24),
-        _ResponsesSection(requestId: requestId, isUrgent: request.isUrgent),
+        // Show confirmation card when request is accepted and current user is requester
+        if (isRequester && request.isAccepted) ...[
+          _DonationConfirmationCard(
+            requestId: requestId,
+            requestDetail: request,
+          ),
+          const SizedBox(height: 24),
+        ],
+        _ResponsesSection(
+          requestId: requestId,
+          isUrgent: request.isUrgent,
+          isRequester: isRequester,
+        ),
       ],
     );
   }
@@ -106,10 +129,15 @@ class _RequestBody extends ConsumerWidget {
 // ── Summary card ──────────────────────────────────────────────────────────────
 
 class _RequestSummaryCard extends ConsumerWidget {
-  const _RequestSummaryCard({required this.request, required this.requestId});
+  const _RequestSummaryCard({
+    required this.request,
+    required this.requestId,
+    required this.isRequester,
+  });
 
   final RequestDetail request;
   final String requestId;
+  final bool isRequester;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -128,8 +156,10 @@ class _RequestSummaryCard extends ConsumerWidget {
                 const SizedBox(width: 8),
               ],
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: request.isActive
                       ? colors.success.withValues(alpha: 0.1)
@@ -141,18 +171,16 @@ class _RequestSummaryCard extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color:
-                        request.isActive ? colors.success : colors.textMedium,
+                    color: request.isActive
+                        ? colors.success
+                        : colors.textMedium,
                   ),
                 ),
               ),
               const Spacer(),
               Text(
                 'Posted ${Formatters.timeAgo(request.createdAt)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colors.textMedium,
-                ),
+                style: TextStyle(fontSize: 12, color: colors.textMedium),
               ),
             ],
           ),
@@ -166,31 +194,132 @@ class _RequestSummaryCard extends ConsumerWidget {
 
           // ── Reason pill (+ free-text note for "other") ─
           ReasonPill(reason: request.reason),
-          if (request.reasonNote != null &&
-              request.reasonNote!.isNotEmpty) ...[
+          if (request.reasonNote != null && request.reasonNote!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               request.reasonNote!,
-              style: TextStyle(
-                fontSize: 13,
-                color: colors.textMedium,
-              ),
+              style: TextStyle(fontSize: 13, color: colors.textMedium),
             ),
           ],
 
           const SizedBox(height: 16),
 
+          // ── Requester + Patient info ──────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline,
+                      size: 14,
+                      color: colors.textMedium,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Requested by  ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textMedium,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        request.requesterName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colors.textHigh,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (request.requesterIsVerified)
+                      const VerifiedBadge(compact: true),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.favorite_border,
+                      size: 14,
+                      color: colors.textMedium,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Patient: ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textMedium,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      request.patientName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colors.textHigh,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
           // ── Details rows ─────────────────────────────────────────
-          _DetailRow(
-            icon: Icons.location_city,
-            label: 'City',
-            value: request.city,
+          GestureDetector(
+            onTap: () {
+              if (request.latitude != null && request.longitude != null) {
+                MapUtils.openPlaceMarker(
+                  request.latitude!,
+                  request.longitude!,
+                  label: request.city,
+                );
+              } else {
+                MapUtils.openNavigationByName(request.city);
+              }
+            },
+            child: _DetailRow(
+              icon: Icons.location_city,
+              label: 'City',
+              value: request.city,
+              tappable: true,
+            ),
           ),
           const SizedBox(height: 10),
-          _DetailRow(
-            icon: Icons.local_hospital,
-            label: 'Hospital',
-            value: request.hospitalName,
+          GestureDetector(
+            onTap: () {
+              if (request.latitude != null && request.longitude != null) {
+                MapUtils.openPlaceMarker(
+                  request.latitude!,
+                  request.longitude!,
+                  label: request.hospitalName.isNotEmpty ? request.hospitalName : request.city,
+                );
+              } else {
+                MapUtils.openNavigationByName(
+                  '${request.hospitalName}, ${request.city}',
+                );
+              }
+            },
+            child: _DetailRow(
+              icon: Icons.local_hospital,
+              label: 'Hospital',
+              value: request.hospitalName,
+              tappable: true,
+            ),
           ),
           const SizedBox(height: 10),
           _DetailRow(
@@ -223,24 +352,36 @@ class _RequestSummaryCard extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: colors.primaryContainer,
+                color: request.isUrgent
+                    ? colors.primaryContainer
+                    : colors.secondaryContainer,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
                   Icon(
-                    Icons.schedule,
+                    request.isUrgent
+                        ? Icons.schedule
+                        : Icons.event_outlined,
                     size: 16,
-                    color: colors.primary,
+                    color: request.isUrgent
+                        ? colors.primary
+                        : colors.secondary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Expires ${Formatters.dateTimeShort(request.expiresAt)}',
+                      request.isUrgent
+                          ? Formatters.expiresCountdown(request.expiresAt)
+                          : request.plannedDate != null
+                              ? '${Formatters.neededBy(request.plannedDate!)}  •  Expires ${Formatters.dateTimeShort(request.expiresAt)}'
+                              : 'Expires ${Formatters.dateTimeShort(request.expiresAt)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: colors.primary,
+                        color: request.isUrgent
+                            ? colors.primary
+                            : colors.secondary,
                       ),
                     ),
                   ),
@@ -249,8 +390,8 @@ class _RequestSummaryCard extends ConsumerWidget {
             ),
           ],
 
-          // ── Actions ──────────────────────────────────────────────
-          if (request.isActive) ...[
+          // ── Actions (only for the requester) ──────────────────────
+          if (isRequester && request.isActive) ...[
             const SizedBox(height: 20),
             Row(
               children: [
@@ -258,7 +399,11 @@ class _RequestSummaryCard extends ConsumerWidget {
                   child: SecondaryButton(
                     label: 'Edit',
                     onPressed: () {
-                      // TODO: navigate to edit screen (future)
+                      context.pushNamed(
+                        RouteNames.requestCreate,
+                        extra: request,
+                        queryParameters: {'editId': request.id},
+                      );
                     },
                   ),
                 ),
@@ -267,8 +412,10 @@ class _RequestSummaryCard extends ConsumerWidget {
                   onPressed: () => _showCloseDialog(context, ref),
                   style: TextButton.styleFrom(
                     foregroundColor: colors.textMedium,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                   child: const Text('Close Request'),
                 ),
@@ -280,43 +427,29 @@ class _RequestSummaryCard extends ConsumerWidget {
     );
   }
 
-  void _showCloseDialog(BuildContext context, WidgetRef ref) {
-    showDialog<bool>(
+  void _showCloseDialog(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Close this request?'),
-        content: const Text(
+      title: 'Close this request?',
+      message:
           'This will mark your request as closed. '
           'Donors will no longer be able to respond.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: context.colors.textMedium,
-            ),
-            child: const Text('Close Request'),
-          ),
-        ],
-      ),
-    ).then((confirmed) async {
-      if (confirmed == true) {
-        final success =
-            await ref.read(closeRequestActionProvider)(requestId);
-        if (context.mounted) {
-          context.showSnackBar(
-            success
-                ? 'Request closed successfully.'
-                : 'Failed to close request. Please try again.',
-            isError: !success,
-          );
-        }
+      confirmLabel: 'Close Request',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await ref.read(closeRequestActionProvider)(requestId);
+      if (context.mounted) {
+        context.showSnackBar(
+          success
+              ? 'Request closed successfully.'
+              : 'Failed to close request. Please try again.',
+          isError: !success,
+        );
       }
-    });
+    }
   }
 }
 
@@ -327,11 +460,13 @@ class _DetailRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.tappable = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final bool tappable;
 
   @override
   Widget build(BuildContext context) {
@@ -339,7 +474,11 @@ class _DetailRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: colors.textMedium),
+        Icon(
+          icon,
+          size: 18,
+          color: tappable ? colors.primary : colors.textMedium,
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -358,14 +497,156 @@ class _DetailRow extends StatelessWidget {
                 value,
                 style: TextStyle(
                   fontSize: 15,
-                  color: colors.textHigh,
+                  color: tappable ? colors.primary : colors.textHigh,
                   fontWeight: FontWeight.w500,
+                  decoration: tappable ? TextDecoration.underline : null,
                 ),
               ),
             ],
           ),
         ),
+        if (tappable) Icon(Icons.open_in_new, size: 14, color: colors.primary),
       ],
+    );
+  }
+}
+
+// ── Donation confirmation card (for requester when request is accepted) ──────
+
+class _DonationConfirmationCard extends ConsumerStatefulWidget {
+  const _DonationConfirmationCard({
+    required this.requestId,
+    required this.requestDetail,
+  });
+
+  final String requestId;
+  final RequestDetail requestDetail;
+
+  @override
+  ConsumerState<_DonationConfirmationCard> createState() =>
+      _DonationConfirmationCardState();
+}
+
+class _DonationConfirmationCardState
+    extends ConsumerState<_DonationConfirmationCard> {
+  bool _isLoading = false;
+
+  Future<void> _confirm(bool confirmed) async {
+    setState(() => _isLoading = true);
+    final result = await ref
+        .read(confirmDonationActionProvider)
+        .call(requestId: widget.requestId, confirmed: confirmed);
+    if (mounted) {
+      setState(() => _isLoading = false);
+      context.showSnackBar(
+        result.message ??
+            (confirmed ? 'Donation confirmed!' : 'Match cancelled.'),
+        isError: !result.success,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colors.primary.withValues(alpha: 0.08),
+            colors.primary.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.volunteer_activism, color: colors.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Donation in progress',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: colors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'A donor has committed to donate for this request. Has the blood been donated?',
+            style: TextStyle(
+              fontSize: 13,
+              color: colors.textMedium,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: ElevatedButton(
+                      onPressed: () => _confirm(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colors.success,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'Yes, donated',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: OutlinedButton(
+                      onPressed: () => _confirm(false),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: colors.urgent,
+                        side: BorderSide(
+                          color: colors.urgent.withValues(alpha: 0.5),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancelled',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }
@@ -373,10 +654,15 @@ class _DetailRow extends StatelessWidget {
 // ── Responses section ─────────────────────────────────────────────────────────
 
 class _ResponsesSection extends ConsumerWidget {
-  const _ResponsesSection({required this.requestId, required this.isUrgent});
+  const _ResponsesSection({
+    required this.requestId,
+    required this.isUrgent,
+    required this.isRequester,
+  });
 
   final String requestId;
   final bool isUrgent;
+  final bool isRequester;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -400,8 +686,7 @@ class _ResponsesSection extends ConsumerWidget {
             const SizedBox(width: 8),
             responsesAsync.when(
               data: (list) => Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: colors.primaryContainer,
                   borderRadius: BorderRadius.circular(999),
@@ -432,7 +717,11 @@ class _ResponsesSection extends ConsumerWidget {
               children: [
                 for (int i = 0; i < responders.length; i++) ...[
                   if (i > 0) const SizedBox(height: 12),
-                  _ResponderCard(responder: responders[i]),
+                  _ResponderCard(
+                    key: ValueKey(responders[i].donorId),
+                    responder: responders[i],
+                    isRequester: isRequester,
+                  ),
                 ],
               ],
             );
@@ -445,10 +734,7 @@ class _ResponsesSection extends ConsumerWidget {
             child: Center(
               child: Text(
                 'Could not load responses',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colors.textMedium,
-                ),
+                style: TextStyle(fontSize: 14, color: colors.textMedium),
               ),
             ),
           ),
@@ -460,10 +746,46 @@ class _ResponsesSection extends ConsumerWidget {
 
 // ── Responder card ────────────────────────────────────────────────────────────
 
-class _ResponderCard extends StatelessWidget {
-  const _ResponderCard({required this.responder});
+class _ResponderCard extends ConsumerStatefulWidget {
+  const _ResponderCard({
+    super.key,
+    required this.responder,
+    required this.isRequester,
+  });
 
   final RequestResponder responder;
+  final bool isRequester;
+
+  @override
+  ConsumerState<_ResponderCard> createState() => _ResponderCardState();
+}
+
+class _ResponderCardState extends ConsumerState<_ResponderCard> {
+  bool _chatLoading = false;
+
+  Future<void> _openChat() async {
+    setState(() => _chatLoading = true);
+    final conversationId = await ref
+        .read(getOrCreateConversationProvider)
+        .call(widget.responder.donorId);
+    if (!mounted) return;
+    setState(() => _chatLoading = false);
+    if (conversationId == null) {
+      context.showSnackBar('Could not open chat. Try again.', isError: true);
+      return;
+    }
+    context.pushNamed(
+      RouteNames.conversation,
+      pathParameters: {'id': conversationId},
+      queryParameters: {
+        'name': widget.responder.name,
+        if (widget.responder.profilePhotoUrl != null &&
+            widget.responder.profilePhotoUrl!.isNotEmpty)
+          'photo': widget.responder.profilePhotoUrl!,
+        if (widget.responder.isVerified) 'verified': '1',
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -477,10 +799,9 @@ class _ResponderCard extends StatelessWidget {
           // ── Donor info row ────────────────────────────────────
           Row(
             children: [
-              // Avatar placeholder
               _DonorAvatar(
-                name: responder.name,
-                photoUrl: responder.profilePhotoUrl,
+                name: widget.responder.name,
+                photoUrl: widget.responder.profilePhotoUrl,
               ),
               const SizedBox(width: 12),
 
@@ -489,36 +810,34 @@ class _ResponderCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Name row with badges
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          responder.name,
+                          widget.responder.name,
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: colors.textHigh,
                           ),
                         ),
-                        if (responder.isTopDonor) _TopDonorBadge(),
-                        if (responder.isVerified)
+                        if (widget.responder.isTopDonor) _TopDonorBadge(),
+                        if (widget.responder.isVerified)
                           const VerifiedBadge(compact: true),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // Classification chip + blood type
                     Wrap(
                       spacing: 8,
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         DonorStatusChip(
-                          classification: responder.donorClassification,
+                          classification: widget.responder.donorClassification,
                         ),
-                        BloodTypeChip(bloodType: responder.bloodGroup),
+                        BloodTypeChip(bloodType: widget.responder.bloodGroup),
                       ],
                     ),
                   ],
@@ -527,8 +846,8 @@ class _ResponderCard extends StatelessWidget {
             ],
           ),
 
-          // ── City / distance ───────────────────────────────────
-          if (responder.city.isNotEmpty) ...[
+          // ── City ───────────────────────────────────────────────
+          if (widget.responder.city.isNotEmpty) ...[
             const SizedBox(height: 10),
             Row(
               children: [
@@ -539,19 +858,16 @@ class _ResponderCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  responder.city,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: colors.textMedium,
-                  ),
+                  widget.responder.city,
+                  style: TextStyle(fontSize: 13, color: colors.textMedium),
                 ),
               ],
             ),
           ],
 
           // ── Response message ──────────────────────────────────
-          if (responder.message != null &&
-              responder.message!.isNotEmpty) ...[
+          if (widget.responder.message != null &&
+              widget.responder.message!.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
               width: double.infinity,
@@ -561,7 +877,7 @@ class _ResponderCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                responder.message!,
+                widget.responder.message!,
                 style: TextStyle(
                   fontSize: 13,
                   color: colors.textHigh,
@@ -578,12 +894,15 @@ class _ResponderCard extends StatelessWidget {
               Expanded(
                 child: SizedBox(
                   height: 40,
-                  child: PrimaryButton(
-                    label: 'Chat',
-                    onPressed: () {
-                      // TODO: navigate to chat with donor
-                    },
-                  ),
+                  child: _chatLoading
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : PrimaryButton(label: 'Chat', onPressed: _openChat),
                 ),
               ),
               const SizedBox(width: 10),
@@ -592,10 +911,9 @@ class _ResponderCard extends StatelessWidget {
                   height: 40,
                   child: OutlinedButton(
                     onPressed: () {
-                      // Navigate to donor detail
                       context.pushNamed(
                         RouteNames.donorDetail,
-                        pathParameters: {'id': responder.donorId},
+                        pathParameters: {'id': widget.responder.donorId},
                       );
                     },
                     style: OutlinedButton.styleFrom(
@@ -678,11 +996,7 @@ class _TopDonorBadge extends StatelessWidget {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.emoji_events,
-            size: 12,
-            color: Color(0xFFF9A825),
-          ),
+          Icon(Icons.emoji_events, size: 12, color: Color(0xFFF9A825)),
           SizedBox(width: 3),
           Text(
             'Top Donor',

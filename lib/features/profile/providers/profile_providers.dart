@@ -8,6 +8,7 @@ import '../../../services/providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import '../../../services/supabase/storage_service_provider.dart';
 import '../../home/providers/home_providers.dart';
+import '../../requests/providers/requests_list_provider.dart';
 
 // ── Logout action ─────────────────────────────────────────────────────────────
 
@@ -242,4 +243,32 @@ final myRequestCountProvider = FutureProvider<int>((ref) async {
       .select('id')
       .eq('requester_id', user.id);
   return data.length;
+});
+
+// ── My requests list (seeker profile) ───────────────────────────────────
+
+/// All blood requests created by the current user, newest first.
+///
+/// Reuses [RequestListItem] from the requests feature so the profile card
+/// can share the same status / expiry logic as the Requests screen.
+final myRequestsListProvider = FutureProvider<List<RequestListItem>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return <RequestListItem>[];
+
+  final client = ref.watch(supabaseClientProvider);
+  const columns =
+      'id, requester_id, blood_group, units_needed, hospital_name, city, '
+      'is_urgent, status, created_at, expires_at, notes, reason, '
+      'reason_note, planned_date';
+
+  final data = await client
+      .from('blood_requests')
+      .select(columns)
+      .eq('requester_id', user.id)
+      .order('created_at', ascending: false)
+      .limit(100);
+
+  return (data as List)
+      .map((row) => RequestListItem.fromMap(row as Map<String, dynamic>))
+      .toList();
 });

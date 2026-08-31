@@ -132,9 +132,14 @@ bool _categoryEnabled(RemoteMessage message, NotificationSettings settings) {
   final type = message.data['type'] as String?;
   switch (type) {
     case 'urgent_request':
+    case 'new_request':
       return settings.urgentRequests;
     case 'new_message':
       return settings.newMessages;
+    case 'request_accepted':
+    case 'request_fulfilled':
+    case 'request_expired':
+      return settings.verificationUpdates; // request-updates category
     case 'verification_approved':
       return settings.verificationUpdates;
     case 'top_donor':
@@ -158,6 +163,7 @@ void _deepLink(Ref ref, RemoteMessage message) {
 
   switch (type) {
     case 'urgent_request':
+    case 'new_request':
       if (linkId != null && linkId.isNotEmpty) {
         router.pushNamed(
           RouteNames.requestDetail,
@@ -165,6 +171,17 @@ void _deepLink(Ref ref, RemoteMessage message) {
         );
       } else {
         router.pushNamed(RouteNames.notifications);
+      }
+    case 'request_accepted':
+    case 'request_fulfilled':
+    case 'request_expired':
+      if (linkId != null && linkId.isNotEmpty) {
+        router.pushNamed(
+          RouteNames.requestDetail,
+          pathParameters: {'id': linkId},
+        );
+      } else {
+        router.pushNamed(RouteNames.myRequests);
       }
     case 'new_message':
       if (linkId != null && linkId.isNotEmpty) {
