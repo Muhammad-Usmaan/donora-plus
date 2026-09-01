@@ -148,6 +148,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ],
                 ),
 
+                // ── Brand logo (top of hero panel) ─────────────────
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Center(
+                      child: Image(
+                        image: AssetImage(
+                          'assets/images/logo/Donora+ Transparent.png'
+                        ),
+                        height: 40,
+                      ),
+                    ),
+                  ),
+                ),
+
                 // ── Skip button (slides 1–2 only) ────────────────────
                 Positioned(
                   top: mq.padding.top + 8,

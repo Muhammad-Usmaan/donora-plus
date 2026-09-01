@@ -241,8 +241,6 @@ class _ProfileBody extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
         ],
-
-        // â”€â”€ Preferences â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         const _SectionTitle(title: 'Preferences'),
         const SizedBox(height: 8),
         AppCard(

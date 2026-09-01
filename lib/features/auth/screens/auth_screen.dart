@@ -71,16 +71,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Wordmark ──────────────────────────────────────────
+              // ── Logo ─────────────────────────────────────────────
               Center(
-                child: Text(
-                  'Donora+',
-                  style: context.textTheme.displayLarge?.copyWith(
-                    color: colors.primary,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
+                child: Image.asset(
+                  'assets/images/logo/Donora+ Transparent.png',
+                  height: 48,
                 ),
               ),
               const SizedBox(height: 32),

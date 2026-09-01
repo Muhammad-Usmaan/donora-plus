@@ -68,8 +68,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Logo placeholder ──────────────────────────────────────
-            const _LogoPlaceholder(),
+            // ── Brand logo ──────────────────────────────────────────
+            Image.asset(
+              'assets/images/logo/Donora+ Transparent.png',
+              height: 96,
+            ),
             const SizedBox(height: 24),
 
             // ── Wordmark ──────────────────────────────────────────────
@@ -107,66 +110,3 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 }
 
-/// Stylized water-drop / heart hybrid logo.
-///
-/// Shape: two rounded lobes on top (heart), tapering to a point at the
-/// bottom (water drop). Rendered entirely with cubic Bézier curves so it
-/// scales crisply at any size.
-class _LogoPlaceholder extends StatelessWidget {
-  const _LogoPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 96,
-      height: 96,
-      child: CustomPaint(
-        painter: _LogoPainter(
-          color: context.colors.primary,
-        ),
-      ),
-    );
-  }
-}
-
-class _LogoPainter extends CustomPainter {
-  const _LogoPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // ── Outer shape: water-drop / heart hybrid ──────────────────────
-    final path = Path()
-      ..moveTo(w * 0.50, h * 0.94)
-      // Left side curving up to the left lobe
-      ..cubicTo(w * 0.02, h * 0.60, w * 0.00, h * 0.22, w * 0.22, h * 0.10)
-      // Left lobe into the centre dip
-      ..cubicTo(w * 0.36, h * 0.02, w * 0.47, h * 0.14, w * 0.50, h * 0.22)
-      // Centre dip into the right lobe
-      ..cubicTo(w * 0.53, h * 0.14, w * 0.64, h * 0.02, w * 0.78, h * 0.10)
-      // Right lobe curving down to the bottom point
-      ..cubicTo(w * 1.00, h * 0.22, w * 0.98, h * 0.60, w * 0.50, h * 0.94)
-      ..close();
-
-    canvas.drawPath(path, Paint()..color = color);
-
-    // ── Inner cut-out: small white heart/drop for depth ─────────────
-    final inner = Path()
-      ..moveTo(w * 0.50, h * 0.72)
-      ..cubicTo(w * 0.30, h * 0.50, w * 0.28, h * 0.36, w * 0.38, h * 0.30)
-      ..cubicTo(w * 0.44, h * 0.26, w * 0.48, h * 0.33, w * 0.50, h * 0.37)
-      ..cubicTo(w * 0.52, h * 0.33, w * 0.56, h * 0.26, w * 0.62, h * 0.30)
-      ..cubicTo(w * 0.72, h * 0.36, w * 0.70, h * 0.50, w * 0.50, h * 0.72)
-      ..close();
-
-    canvas.drawPath(inner, Paint()..color = Colors.white);
-  }
-
-  @override
-  bool shouldRepaint(covariant _LogoPainter oldDelegate) =>
-      oldDelegate.color != color;
-}
