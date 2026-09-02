@@ -37,8 +37,14 @@ begin
     -- Urgent: expires 24 hours after creation.
     new.expires_at = new.created_at + interval '24 hours';
   elsif new.planned_date is not null then
-    -- Planned: expires at end of the planned day.
-    new.expires_at = date_trunc('day', new.planned_date) + interval '1 day' - interval '1 second';
+    -- Planned: expires at end of the planned day in Pakistan time (UTC+5).
+    -- date_trunc('day', ...) truncates in the session timezone (UTC on
+    -- Supabase), so we convert to PKT first, truncate, add the offset,
+    -- then convert back to UTC.
+    new.expires_at = (
+      date_trunc('day', new.planned_date at time zone 'Asia/Karachi')
+      + interval '1 day' - interval '1 second'
+    ) at time zone 'Asia/Karachi';
   end if;
   return new;
 end;

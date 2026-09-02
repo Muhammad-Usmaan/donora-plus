@@ -658,3 +658,122 @@ class _EditPhoneDialogState extends State<_EditPhoneDialog> {
     );
   }
 }
+
+// ── Edit hemoglobin level ───────────────────────────────────────────────────
+
+Future<void> showEditHemoglobinDialog(
+  BuildContext context, {
+  required WidgetRef ref,
+  required double? currentValue,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) =>
+        _EditHemoglobinDialog(ref: ref, currentValue: currentValue),
+  );
+}
+
+class _EditHemoglobinDialog extends StatefulWidget {
+  const _EditHemoglobinDialog({
+    required this.ref,
+    required this.currentValue,
+  });
+
+  final WidgetRef ref;
+  final double? currentValue;
+
+  @override
+  State<_EditHemoglobinDialog> createState() => _EditHemoglobinDialogState();
+}
+
+class _EditHemoglobinDialogState extends State<_EditHemoglobinDialog> {
+  late final TextEditingController _controller;
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.currentValue?.toStringAsFixed(1) ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    double? value;
+    if (text.isNotEmpty) {
+      value = double.tryParse(text);
+      if (value == null) {
+        setState(() => _error = 'Please enter a valid number.');
+        return;
+      }
+      if (value < 5.0 || value > 20.0) {
+        setState(
+          () => _error = 'Value must be between 5.0 and 20.0 g/dL.',
+        );
+        return;
+      }
+    }
+    setState(() {
+      _error = null;
+      _saving = true;
+    });
+
+    try {
+      await widget.ref.read(updateProfileFieldProvider)({
+        'hemoglobin_level': value,
+      });
+      if (mounted) {
+        Navigator.of(context).pop();
+        context.showSnackBar('Hemoglobin level updated');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        context.showSnackBar('Update failed: $e', isError: true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppDialog(
+      title: 'Hemoglobin Level',
+      message: 'Self-reported hemoglobin level in g/dL. '
+          'This is visible to seekers on your donor profile.',
+      icon: Icons.bloodtype,
+      iconColor: context.colors.primary,
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        enabled: !_saving,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        onChanged: (_) => setState(() => _error = null),
+        decoration: InputDecoration(
+          labelText: 'Hemoglobin (g/dL)',
+          hintText: 'e.g. 14.0',
+          errorText: _error,
+          prefixIcon: const Icon(Icons.bloodtype, size: 20),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        DialogActionButton(
+          label: 'Save',
+          loading: _saving,
+          onPressed: _save,
+        ),
+      ],
+    );
+  }
+}

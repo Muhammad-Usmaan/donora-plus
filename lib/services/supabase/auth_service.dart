@@ -70,6 +70,16 @@ class SupabaseAuthService {
     return false;
   }
 
+  /// Checks whether the given [userId]'s profile is suspended.
+  Future<bool> checkSuspended(String userId) async {
+    final data = await _client
+        .from('profiles')
+        .select('is_suspended')
+        .eq('id', userId)
+        .maybeSingle();
+    return (data?['is_suspended'] as bool?) ?? false;
+  }
+
   /// The currently authenticated user, or null if not signed in.
   User? get currentUser => _client.auth.currentUser;
 

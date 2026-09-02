@@ -49,6 +49,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     if (!mounted) return;
 
     if (user != null) {
+      // Check if user is suspended before allowing entry.
+      try {
+        final suspended = await ref
+            .read(authServiceProvider)
+            .checkSuspended(user.id);
+        if (suspended) {
+          await ref.read(authServiceProvider).signOut();
+          if (!mounted) return;
+          context.go(RoutePaths.auth);
+          return;
+        }
+      } catch (_) {
+        // If the check fails, allow entry — the periodic monitor
+        // in HomeScreen will re-check shortly.
+      }
+      if (!mounted) return;
       context.go(RoutePaths.home);
     } else {
       final onboardingSeen = ref.read(onboardingSeenProvider);

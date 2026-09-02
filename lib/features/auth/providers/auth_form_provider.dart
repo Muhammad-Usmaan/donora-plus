@@ -37,10 +37,45 @@ class LoginNotifier extends StateNotifier<LoginState> {
             emailOrPhone.trim(),
             password,
           );
+
+      // Check if the user is suspended immediately after sign-in.
+      final user = _ref.read(authServiceProvider).currentUser;
+      if (user != null) {
+        final suspended =
+            await _ref.read(authServiceProvider).checkSuspended(user.id);
+        if (suspended) {
+          await _ref.read(authServiceProvider).signOut();
+          state = state.copyWith(
+            isLoading: false,
+            serverError:
+                'Your account has been suspended. Contact support for details.',
+          );
+          return;
+        }
+      }
+
       state = const LoginState(); // success — router redirect handles nav
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false, serverError: e.message);
     } catch (e) {
+      // If an unexpected error occurred, check whether the user is
+      // actually signed in but suspended (session restored from cache).
+      final user = _ref.read(authServiceProvider).currentUser;
+      if (user != null) {
+        try {
+          final suspended =
+              await _ref.read(authServiceProvider).checkSuspended(user.id);
+          if (suspended) {
+            await _ref.read(authServiceProvider).signOut();
+            state = state.copyWith(
+              isLoading: false,
+              serverError:
+                  'Your account has been suspended. Contact support for details.',
+            );
+            return;
+          }
+        } catch (_) {}
+      }
       state = state.copyWith(
         isLoading: false,
         serverError: 'Something went wrong. Please try again.',

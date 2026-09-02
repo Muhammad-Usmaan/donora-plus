@@ -328,32 +328,70 @@ class _DonorDetailBodyState extends ConsumerState<_DonorDetailBody> {
 
         const SizedBox(height: 20),
 
-        // Stats: Blood Type / Donated / Requested
-        Row(
-          children: [
-            Expanded(
-              child: StatTile(
-                value: _donor.bloodGroup,
-                caption: 'Blood Type',
-                valueColor: colors.primary,
+        // Stats row — adapts layout when hemoglobin is present.
+        if (_donor.hemoglobinLevel != null) ...[
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  value: _donor.bloodGroup,
+                  caption: 'Blood Type',
+                  valueColor: colors.primary,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: StatTile(
-                value: '${_donor.totalDonations ?? 0}',
-                caption: 'Donated',
+              const SizedBox(width: 12),
+              Expanded(
+                child: StatTile(
+                  value: '${_donor.totalDonations ?? 0}',
+                  caption: 'Donated',
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: StatTile(
-                value: responseCount ?? '—',
-                caption: 'Requested',
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  value: responseCount ?? '—',
+                  caption: 'Requested',
+                ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: StatTile(
+                  value: _donor.hemoglobinLevel!.toStringAsFixed(1),
+                  caption: 'Hemoglobin (g/dL)',
+                ),
+              ),
+            ],
+          ),
+        ] else
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  value: _donor.bloodGroup,
+                  caption: 'Blood Type',
+                  valueColor: colors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: StatTile(
+                  value: '${_donor.totalDonations ?? 0}',
+                  caption: 'Donated',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: StatTile(
+                  value: responseCount ?? '—',
+                  caption: 'Requested',
+                ),
+              ),
+            ],
+          ),
 
         // Last donation (only when the donor made it public)
         if (_donor.showLastDonationDate && _donor.lastDonationDate != null) ...[

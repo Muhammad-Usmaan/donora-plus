@@ -1,8 +1,16 @@
 /// Environment configuration loaded via --dart-define at compile time.
 ///
-/// Usage:
-///   flutter run --dart-define=SUPABASE_URL=https://xxx.supabase.co \
-///               --dart-define=SUPABASE_ANON_KEY=eyJhbGci...
+/// Values are baked into the binary at build time. They are NOT read from
+/// disk at runtime, so the build command MUST supply them:
+///
+///   # Debug (VS Code launch.json handles this automatically)
+///   flutter run --dart-define-from-file=.env
+///
+///   # Release (use the helper scripts: build.sh / build.ps1)
+///   flutter build apk --release --dart-define-from-file=.env
+///
+/// If these values are empty in a release build the app will throw a
+/// StateError at startup with a descriptive message — see main().
 ///
 /// SECURITY: The Supabase SERVICE ROLE KEY must NEVER be referenced here
 /// or anywhere else in the Flutter codebase. It should only exist in

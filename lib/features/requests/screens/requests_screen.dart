@@ -26,8 +26,7 @@ class RequestsScreen extends ConsumerWidget {
     final filter = ref.watch(requestListFilterProvider);
     final requests = ref.watch(filteredRequestsProvider);
 
-    final hasActiveFilters =
-        filter.isFilteringBlood || filter.urgentOnly;
+    final hasActiveFilters = filter.isFilteringBlood || filter.urgentOnly;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -52,9 +51,8 @@ class RequestsScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: _ScopeSwitch(
               scope: filter.scope,
-              onChanged: (scope) => ref
-                  .read(requestListFilterProvider.notifier)
-                  .setScope(scope),
+              onChanged: (scope) =>
+                  ref.read(requestListFilterProvider.notifier).setScope(scope),
             ),
           ),
 
@@ -105,10 +103,11 @@ class RequestsScreen extends ConsumerWidget {
                   child: Text(
                     requestsAsync.hasValue
                         ? '${requests.length} '
-                            '${requests.length == 1 ? 'request' : 'requests'}'
+                              '${requests.length == 1 ? 'request' : 'requests'}'
                         : ' ',
-                    style: context.textTheme.bodySmall
-                        ?.copyWith(color: colors.textMedium),
+                    style: context.textTheme.bodySmall?.copyWith(
+                      color: colors.textMedium,
+                    ),
                   ),
                 ),
                 if (hasActiveFilters)
@@ -132,8 +131,7 @@ class RequestsScreen extends ConsumerWidget {
           // ── List ────────────────────────────────────────────────
           Expanded(
             child: requestsAsync.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => _ErrorView(
                 message: error.toString(),
                 onRetry: () => ref.invalidate(requestsListProvider),
@@ -167,9 +165,8 @@ class RequestsScreen extends ConsumerWidget {
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                   itemCount: requests.length,
-                  itemBuilder: (context, index) => _RequestCard(
-                    request: requests[index],
-                  ),
+                  itemBuilder: (context, index) =>
+                      _RequestCard(request: requests[index]),
                 );
               },
             ),
@@ -357,13 +354,20 @@ class _RequestCard extends StatelessWidget {
               const Spacer(),
               if (request.isActive && request.isUrgent)
                 _ListExpiryLabel(expiresAt: request.expiresAt, isUrgent: true)
-              else if (request.isActive && !request.isUrgent && request.plannedDate != null)
-                _ListExpiryLabel(expiresAt: request.expiresAt, isUrgent: false, plannedDate: request.plannedDate!)
+              else if (request.isActive &&
+                  !request.isUrgent &&
+                  request.plannedDate != null)
+                _ListExpiryLabel(
+                  expiresAt: request.expiresAt,
+                  isUrgent: false,
+                  plannedDate: request.plannedDate!,
+                )
               else
                 Text(
                   Formatters.timeAgo(request.createdAt),
-                  style: context.textTheme.bodySmall
-                      ?.copyWith(color: colors.textMedium),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                  ),
                 ),
             ],
           ),
@@ -377,19 +381,16 @@ class _RequestCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${request.unitsNeeded} unit${request.unitsNeeded == 1 ? '' : 's'}',
-                style: context.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: context.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
 
           // Reason pill.
-          Row(
-            children: [
-              ReasonPill(reason: request.reason),
-            ],
-          ),
+          Row(children: [ReasonPill(reason: request.reason)]),
           const SizedBox(height: 10),
 
           // Hospital + city.
@@ -407,8 +408,9 @@ class _RequestCard extends StatelessWidget {
                       ? 'Hospital not specified'
                       : request.hospitalName,
                   overflow: TextOverflow.ellipsis,
-                  style: context.textTheme.bodySmall
-                      ?.copyWith(color: colors.textMedium),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                  ),
                 ),
               ),
             ],
@@ -426,8 +428,9 @@ class _RequestCard extends StatelessWidget {
                 child: Text(
                   request.city.isEmpty ? 'City not set' : request.city,
                   overflow: TextOverflow.ellipsis,
-                  style: context.textTheme.bodySmall
-                      ?.copyWith(color: colors.textMedium),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -446,8 +449,9 @@ class _RequestCard extends StatelessWidget {
               request.notes!,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: context.textTheme.bodySmall
-                  ?.copyWith(color: colors.textMedium),
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.textMedium,
+              ),
             ),
           ],
         ],
@@ -472,6 +476,8 @@ class _StatusChip extends StatelessWidget {
         color = colors.secondary;
       case 'closed':
         color = colors.textMedium;
+      case 'expired':
+        color = colors.warning;
       case 'active':
         color = request.isExpired ? colors.warning : colors.success;
       default:
@@ -534,8 +540,9 @@ class _EmptyView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: context.textTheme.bodySmall
-                  ?.copyWith(color: colors.textMedium),
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.textMedium,
+              ),
             ),
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 16),
@@ -578,8 +585,9 @@ class _ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: context.textTheme.bodySmall
-                  ?.copyWith(color: colors.textMedium),
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.textMedium,
+              ),
             ),
             const SizedBox(height: 16),
             TextButton.icon(

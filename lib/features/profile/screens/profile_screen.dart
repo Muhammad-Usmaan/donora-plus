@@ -220,6 +220,19 @@ class _ProfileBody extends ConsumerWidget {
                   current: profile.donorClassification,
                 ),
                 const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.bloodtype,
+                  label: 'Hemoglobin Level (g/dL)',
+                  subtitle: profile.hemoglobinLevel != null
+                      ? profile.hemoglobinLevel!.toStringAsFixed(1)
+                      : 'Not set — tap to add',
+                  onTap: () => showEditHemoglobinDialog(
+                    context,
+                    ref: ref,
+                    currentValue: profile.hemoglobinLevel,
+                  ),
+                ),
+                const Divider(height: 1),
                 _VerificationStatusRow(
                   isVerified: profile.isVerified,
                 ),
@@ -973,7 +986,7 @@ class _VerificationStatusRow extends StatelessWidget {
                   Text(
                     isVerified
                         ? 'Verified'
-                        : 'Not verified â€” tap to submit',
+                        : 'Not verified! Tap to submit',
                     style: TextStyle(
                       fontSize: 13,
                       color:
@@ -1001,13 +1014,111 @@ class _VerificationStatusRow extends StatelessWidget {
 
 // â”€â”€ Role switcher row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-class _RoleSwitcherRow extends ConsumerWidget {
+class _RoleSwitcherRow extends ConsumerStatefulWidget {
   const _RoleSwitcherRow({required this.currentRole});
 
   final String currentRole;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RoleSwitcherRow> createState() => _RoleSwitcherRowState();
+}
+
+class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
+  /// Returns the age in whole years for a given [date].
+  int _computeAge(DateTime date) {
+    final now = DateTime.now();
+    int age = now.year - date.year;
+    if (now.month < date.month ||
+        (now.month == date.month && now.day < date.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  void _onDonorTap() {
+    final profileAsync = ref.read(userProfileProvider);
+    final profile = profileAsync.valueOrNull;
+    final dob = profile?.dateOfBirth;
+
+    if (dob == null) {
+      // DOB not collected — prompt user to add it.
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AppDialog(
+          title: 'Date of Birth Required',
+          message:
+              'To switch to a donor account, we need your date of birth to verify you are 18 or older. Please add it to your profile first.',
+          icon: Icons.cake_outlined,
+          iconColor: context.colors.secondary,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Later'),
+            ),
+            DialogActionButton(
+              label: 'Add Date of Birth',
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _pickAndSetDob();
+              },
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (_computeAge(dob) < 18) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AppDialog(
+          title: 'Age Restriction',
+          message: 'You must be 18 or older to register as a donor.',
+          icon: Icons.info_outline,
+          iconColor: context.colors.urgent,
+          actions: [
+            DialogActionButton(
+              label: 'OK',
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    ref.read(switchRoleActionProvider)('donor');
+  }
+
+  Future<void> _pickAndSetDob() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(1920),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+    if (picked == null || !mounted) return;
+
+    final formatted =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    try {
+      await ref.read(updateProfileFieldProvider)({
+        'date_of_birth': formatted,
+      });
+      if (!mounted) return;
+      // DOB saved — now attempt the role switch.
+      ref.read(switchRoleActionProvider)('donor');
+    } catch (e) {
+      if (mounted) {
+        context.showSnackBar('Failed to save date of birth: $e',
+            isError: true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.colors;
     final activeRole = ref.watch(activeRoleProvider);
     final isSeeker = activeRole == 'seeker';
@@ -1017,7 +1128,6 @@ class _RoleSwitcherRow extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Label row
           Row(
             children: [
               Icon(Icons.swap_horiz, size: 20, color: colors.textMedium),
@@ -1033,7 +1143,6 @@ class _RoleSwitcherRow extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // Full-width pill toggle
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -1056,9 +1165,7 @@ class _RoleSwitcherRow extends ConsumerWidget {
                   child: _ToggleOption(
                     label: 'Donor',
                     selected: !isSeeker,
-                    onTap: () {
-                      ref.read(switchRoleActionProvider)('donor');
-                    },
+                    onTap: _onDonorTap,
                   ),
                 ),
               ],

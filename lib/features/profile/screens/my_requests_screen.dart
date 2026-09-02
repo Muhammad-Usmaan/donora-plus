@@ -43,9 +43,8 @@ class MyRequestsScreen extends ConsumerWidget {
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
             itemCount: requests.length,
-            itemBuilder: (context, index) => _MyRequestCard(
-              request: requests[index],
-            ),
+            itemBuilder: (context, index) =>
+                _MyRequestCard(request: requests[index]),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -179,8 +178,9 @@ class _MyRequestCard extends StatelessWidget {
               else
                 Text(
                   Formatters.timeAgo(request.createdAt),
-                  style: context.textTheme.bodySmall
-                      ?.copyWith(color: colors.textMedium),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                  ),
                 ),
             ],
           ),
@@ -194,8 +194,9 @@ class _MyRequestCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${request.unitsNeeded} unit${request.unitsNeeded == 1 ? '' : 's'}',
-                style: context.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: context.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -208,8 +209,11 @@ class _MyRequestCard extends StatelessWidget {
           // Hospital.
           Row(
             children: [
-              Icon(Icons.local_hospital_outlined,
-                  size: 14, color: colors.textMedium),
+              Icon(
+                Icons.local_hospital_outlined,
+                size: 14,
+                color: colors.textMedium,
+              ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
@@ -217,8 +221,9 @@ class _MyRequestCard extends StatelessWidget {
                       ? 'Hospital not specified'
                       : request.hospitalName,
                   overflow: TextOverflow.ellipsis,
-                  style: context.textTheme.bodySmall
-                      ?.copyWith(color: colors.textMedium),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                  ),
                 ),
               ),
             ],
@@ -228,20 +233,27 @@ class _MyRequestCard extends StatelessWidget {
           // City + chevron.
           Row(
             children: [
-              Icon(Icons.location_on_outlined,
-                  size: 14, color: colors.textMedium),
+              Icon(
+                Icons.location_on_outlined,
+                size: 14,
+                color: colors.textMedium,
+              ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   request.city.isEmpty ? 'City not set' : request.city,
                   overflow: TextOverflow.ellipsis,
-                  style: context.textTheme.bodySmall
-                      ?.copyWith(color: colors.textMedium),
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: colors.textMedium,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right_rounded,
-                  size: 22, color: colors.textMedium),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 22,
+                color: colors.textMedium,
+              ),
             ],
           ),
         ],
@@ -300,6 +312,8 @@ class _StatusChip extends StatelessWidget {
         color = colors.secondary;
       case 'closed':
         color = colors.textMedium;
+      case 'expired':
+        color = colors.warning;
       case 'active':
         color = request.isExpired ? colors.warning : colors.success;
       case 'accepted':

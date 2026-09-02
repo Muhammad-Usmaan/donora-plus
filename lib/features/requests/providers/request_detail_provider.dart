@@ -68,12 +68,14 @@ class RequestDetail {
   /// When the donation is actually needed (non-urgent / pre-planned only).
   final DateTime? plannedDate;
 
-  bool get isActive => status == 'active';
+  bool get isActive => status == 'active' && !isExpired;
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
   bool get isAccepted => status == 'accepted';
   bool get isFulfilled => status == 'fulfilled';
 
   factory RequestDetail.fromMap(Map<String, dynamic> map) {
-    final profiles = map['requester'] as Map<String, dynamic>? ??
+    final profiles =
+        map['requester'] as Map<String, dynamic>? ??
         map['profiles'] as Map<String, dynamic>? ??
         {};
 
@@ -92,16 +94,22 @@ class RequestDetail {
       isUrgent: map['is_urgent'] as bool? ?? false,
       status: map['status'] as String? ?? 'active',
       fulfilledByDonorId: map['fulfilled_by_donor_id'] as String?,
-      createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
+      createdAt:
+          DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.now(),
-      expiresAt: DateTime.tryParse(map['expires_at'] as String? ?? '') ??
+      expiresAt:
+          DateTime.tryParse(map['expires_at'] as String? ?? '') ??
           DateTime.now().add(const Duration(hours: 72)),
       notes: map['notes'] as String?,
       allowPhoneContact: map['allow_phone_contact'] as bool? ?? false,
       reason: RequestReason.fromValue(map['reason'] as String?),
       reasonNote: map['reason_note'] as String?,
-      latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
-      longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
+      latitude: map['latitude'] != null
+          ? (map['latitude'] as num).toDouble()
+          : null,
+      longitude: map['longitude'] != null
+          ? (map['longitude'] as num).toDouble()
+          : null,
       plannedDate: map['planned_date'] != null
           ? DateTime.tryParse(map['planned_date'] as String)
           : null,
@@ -146,8 +154,7 @@ class RequestResponder {
       bloodGroup: d['blood_group'] as String? ?? '',
       isVerified: d['is_verified'] as bool? ?? false,
       isTopDonor: d['is_top_donor'] as bool? ?? false,
-      donorClassification:
-          d['donor_classification'] as String? ?? 'volunteer',
+      donorClassification: d['donor_classification'] as String? ?? 'volunteer',
       city: d['city'] as String? ?? '',
       profilePhotoUrl: d['profile_photo_url'] as String?,
       respondedAt: map['responded_at'] != null
@@ -161,13 +168,16 @@ class RequestResponder {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 /// Fetches a single blood request by its ID enriched with requester profile.
-final requestDetailProvider =
-    FutureProvider.family<RequestDetail, String>((ref, requestId) async {
+final requestDetailProvider = FutureProvider.family<RequestDetail, String>((
+  ref,
+  requestId,
+) async {
   final client = ref.watch(supabaseClientProvider);
   final data = await client
       .from('blood_requests')
       .select(
-          '*, requester:profiles!requester_id(id, name, phone, profile_photo_url, is_verified)')
+        '*, requester:profiles!requester_id(id, name, phone, profile_photo_url, is_verified)',
+      )
       .eq('id', requestId)
       .maybeSingle();
 
@@ -193,8 +203,7 @@ final donorHasActiveCommitmentProvider = FutureProvider<bool>((ref) async {
 });
 
 /// Action provider: responds to a blood request via secure RPC.
-final respondToRequestActionProvider =
-    Provider<RespondToRequestAction>((ref) {
+final respondToRequestActionProvider = Provider<RespondToRequestAction>((ref) {
   return RespondToRequestAction(ref);
 });
 
@@ -210,10 +219,7 @@ class RespondToRequestAction {
       final client = _ref.read(supabaseClientProvider);
       final res = await client.rpc(
         'respond_to_blood_request',
-        params: {
-          'p_request_id': requestId,
-          'p_message': message,
-        },
+        params: {'p_request_id': requestId, 'p_message': message},
       );
       final map = res as Map<String, dynamic>? ?? {};
       final isSuccess = map['success'] == true;
@@ -274,8 +280,7 @@ class RespondToRequestAction {
 }
 
 /// Action provider: confirms or cancels blood donation by the requester via secure RPC.
-final confirmDonationActionProvider =
-    Provider<ConfirmDonationAction>((ref) {
+final confirmDonationActionProvider = Provider<ConfirmDonationAction>((ref) {
   return ConfirmDonationAction(ref);
 });
 
@@ -291,10 +296,7 @@ class ConfirmDonationAction {
       final client = _ref.read(supabaseClientProvider);
       final res = await client.rpc(
         'confirm_blood_donation',
-        params: {
-          'p_request_id': requestId,
-          'p_confirmed': confirmed,
-        },
+        params: {'p_request_id': requestId, 'p_confirmed': confirmed},
       );
       final map = res as Map<String, dynamic>? ?? {};
       final isSuccess = map['success'] == true;
@@ -363,28 +365,30 @@ class ConfirmDonationAction {
 /// Queries `request_responses` joined with `profiles`.
 /// Returns an empty list if the table doesn't exist yet (graceful fallback).
 final requestResponsesProvider =
-    FutureProvider.family<List<RequestResponder>, String>(
-        (ref, requestId) async {
-  final client = ref.watch(supabaseClientProvider);
+    FutureProvider.family<List<RequestResponder>, String>((
+      ref,
+      requestId,
+    ) async {
+      final client = ref.watch(supabaseClientProvider);
 
-  try {
-    final data = await client
-        .from('request_responses')
-        .select('*, profiles!donor_id(*)')
-        .eq('request_id', requestId)
-        .order('responded_at', ascending: false);
+      try {
+        final data = await client
+            .from('request_responses')
+            .select('*, profiles!donor_id(*)')
+            .eq('request_id', requestId)
+            .order('responded_at', ascending: false);
 
-    return (data as List)
-        .map((row) => RequestResponder.fromMap(row as Map<String, dynamic>))
-        .toList();
-  } on PostgrestException catch (e) {
-    // If the table doesn't exist yet, return empty rather than crashing.
-    if (e.code == '42P01' || e.message.contains('does not exist')) {
-      return <RequestResponder>[];
-    }
-    rethrow;
-  }
-});
+        return (data as List)
+            .map((row) => RequestResponder.fromMap(row as Map<String, dynamic>))
+            .toList();
+      } on PostgrestException catch (e) {
+        // If the table doesn't exist yet, return empty rather than crashing.
+        if (e.code == '42P01' || e.message.contains('does not exist')) {
+          return <RequestResponder>[];
+        }
+        rethrow;
+      }
+    });
 
 /// Action provider: closes a blood request by setting its status to 'closed'.
 final closeRequestActionProvider = Provider<CloseRequestAction>((ref) {
@@ -407,7 +411,8 @@ class CloseRequestAction {
       final client = _ref.read(supabaseClientProvider);
       await client
           .from('blood_requests')
-          .update({'status': 'closed'}).eq('id', requestId);
+          .update({'status': 'closed'})
+          .eq('id', requestId);
 
       // Invalidate the cached request detail so the UI refreshes.
       _ref.invalidate(requestDetailProvider(requestId));
@@ -444,20 +449,23 @@ class UpdateRequestAction {
   }) async {
     try {
       final client = _ref.read(supabaseClientProvider);
-      await client.from('blood_requests').update({
-        'blood_group': bloodGroup,
-        'reason': reason,
-        'reason_note': reasonNote,
-        'units_needed': unitsNeeded,
-        'hospital_name': hospitalName,
-        'city': city,
-        'notes': notes,
-        'is_urgent': isUrgent,
-        'allow_phone_contact': allowPhoneContact,
-        'planned_date': isUrgent
-            ? null
-            : plannedDate?.toUtc().toIso8601String(),
-      }).eq('id', requestId);
+      await client
+          .from('blood_requests')
+          .update({
+            'blood_group': bloodGroup,
+            'reason': reason,
+            'reason_note': reasonNote,
+            'units_needed': unitsNeeded,
+            'hospital_name': hospitalName,
+            'city': city,
+            'notes': notes,
+            'is_urgent': isUrgent,
+            'allow_phone_contact': allowPhoneContact,
+            'planned_date': isUrgent
+                ? null
+                : plannedDate?.toUtc().toIso8601String(),
+          })
+          .eq('id', requestId);
 
       _ref.invalidate(requestDetailProvider(requestId));
       return true;
@@ -466,4 +474,3 @@ class UpdateRequestAction {
     }
   }
 }
-

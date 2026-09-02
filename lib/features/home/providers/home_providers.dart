@@ -22,12 +22,14 @@ class UserProfile {
     required this.isVerified,
     required this.isTopDonor,
     required this.donorClassification,
+    this.isSuspended = false,
     this.phone,
     this.email,
     this.dateOfBirth,
     this.lastDonationDate,
     this.profilePhotoUrl,
     this.totalDonations = 0,
+    this.hemoglobinLevel,
     this.latitude,
     this.longitude,
   });
@@ -39,6 +41,7 @@ class UserProfile {
   final String activeRole;
   final bool isVerified;
   final bool isTopDonor;
+  final bool isSuspended;
   final String donorClassification;
   final String? phone;
   final String? email;
@@ -46,6 +49,7 @@ class UserProfile {
   final DateTime? lastDonationDate;
   final String? profilePhotoUrl;
   final int totalDonations;
+  final double? hemoglobinLevel;
   final double? latitude;
   final double? longitude;
 
@@ -57,6 +61,7 @@ class UserProfile {
     activeRole: map['active_role'] as String? ?? 'seeker',
     isVerified: map['is_verified'] as bool? ?? false,
     isTopDonor: map['is_top_donor'] as bool? ?? false,
+    isSuspended: map['is_suspended'] as bool? ?? false,
     donorClassification: map['donor_classification'] as String? ?? 'volunteer',
     phone: map['phone'] as String?,
     email: map['email'] as String?,
@@ -68,6 +73,9 @@ class UserProfile {
         : null,
     profilePhotoUrl: map['profile_photo_url'] as String?,
     totalDonations: map['total_donations'] as int? ?? 0,
+    hemoglobinLevel: map['hemoglobin_level'] != null
+        ? (map['hemoglobin_level'] as num).toDouble()
+        : null,
     latitude: map['latitude'] != null
         ? (map['latitude'] as num).toDouble()
         : null,
@@ -158,6 +166,7 @@ final userProfileProvider = StreamProvider<UserProfile>((ref) async* {
       'blood_group': meta['blood_group'] as String?,
       'city': meta['city'] as String?,
       'donor_classification': meta['donor_classification'] as String?,
+      'date_of_birth': meta['date_of_birth'] as String?,
       'latitude': meta['latitude'] != null
           ? (meta['latitude'] as num).toDouble()
           : null,
@@ -336,6 +345,10 @@ final nearbyDonorsProvider = FutureProvider<List<Map<String, dynamic>>>((
 
 /// Realtime stream of active blood requests created by the current user.
 /// Updates automatically when new requests are created or existing ones change.
+///
+/// Client-side expiry filter: the DB status may lag behind `expires_at` when
+/// the scheduled expiry job hasn't run yet, so we filter out requests whose
+/// `expires_at` has already passed to keep the "Active" section accurate.
 final activeRequestsProvider = StreamProvider<List<Map<String, dynamic>>>((
   ref,
 ) {
@@ -348,7 +361,14 @@ final activeRequestsProvider = StreamProvider<List<Map<String, dynamic>>>((
       .stream(primaryKey: ['id'])
       .eq('requester_id', user.id)
       .eq('status', 'active')
-      .order('created_at', ascending: false);
+      .order('created_at', ascending: false)
+      .map((requests) {
+    final now = DateTime.now().toUtc();
+    return requests.where((r) {
+      final expiresAt = DateTime.tryParse(r['expires_at'] as String? ?? '');
+      return expiresAt == null || expiresAt.isAfter(now);
+    }).toList();
+  });
 });
 
 // ── In-progress donations (seeker view) ─────────────────────────────────────

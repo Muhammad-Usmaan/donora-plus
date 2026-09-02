@@ -24,6 +24,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   Timer? _refreshTimer;
+  Timer? _suspensionCheckTimer;
 
   @override
   void initState() {
@@ -37,11 +38,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref.invalidate(nearbyDonorsProvider);
       }
     });
+
+    // Periodic suspension check — catches mid-session suspensions
+    // (admin suspends user while they are already logged in).
+    _suspensionCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _checkSuspension();
+    });
+  }
+
+  Future<void> _checkSuspension() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null || !mounted) return;
+    try {
+      final suspended =
+          await ref.read(authServiceProvider).checkSuspended(user.id);
+      if (suspended && mounted) {
+        await ref.read(authServiceProvider).signOut();
+        if (mounted) {
+          context.go(RoutePaths.auth);
+          if (mounted) {
+            context.showSnackBar(
+              'Your account has been suspended. Contact support for details.',
+            );
+          }
+        }
+      }
+    } catch (_) {
+      // Network error — will retry on next tick.
+    }
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _suspensionCheckTimer?.cancel();
     super.dispose();
   }
 

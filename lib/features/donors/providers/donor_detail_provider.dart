@@ -29,6 +29,7 @@ class DonorProfile {
     this.showLastDonationDate = false,
     this.phone,
     this.email,
+    this.hemoglobinLevel,
     this.latitude,
     this.longitude,
   });
@@ -55,6 +56,10 @@ class DonorProfile {
   /// Call Now action; email is shown when no phone is on file.
   final String? phone;
   final String? email;
+
+  /// Self-reported hemoglobin level (g/dL). Null when the donor hasn't
+  /// filled it in — the seeker-facing view should hide the line entirely.
+  final double? hemoglobinLevel;
 
   final double? latitude;
   final double? longitude;
@@ -90,6 +95,9 @@ class DonorProfile {
             map['show_last_donation_date'] as bool? ?? false,
         phone: map['phone'] as String?,
         email: map['email'] as String?,
+        hemoglobinLevel: map['hemoglobin_level'] != null
+            ? (map['hemoglobin_level'] as num).toDouble()
+            : null,
         latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
         longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
       );
@@ -130,7 +138,8 @@ final donorResponseToViewerProvider =
         .from('blood_requests')
         .select('id')
         .eq('requester_id', user.id)
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .gt('expires_at', DateTime.now().toUtc().toIso8601String());
 
     if ((myRequests as List).isEmpty) return null;
 

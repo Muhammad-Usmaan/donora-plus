@@ -161,17 +161,30 @@ class _RequestSummaryCard extends ConsumerWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: request.isActive
+                  color:
+                      request.status == 'expired' ||
+                          (request.status == 'active' && request.isExpired)
+                      ? colors.warning.withValues(alpha: 0.1)
+                      : request.isActive
                       ? colors.success.withValues(alpha: 0.1)
                       : colors.textMedium.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  request.isActive ? 'Active' : 'Closed',
+                  request.status == 'expired' ||
+                          (request.status == 'active' && request.isExpired)
+                      ? 'Expired'
+                      : request.isActive
+                      ? 'Active'
+                      : 'Closed',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: request.isActive
+                    color:
+                        request.status == 'expired' ||
+                            (request.status == 'active' && request.isExpired)
+                        ? colors.warning
+                        : request.isActive
                         ? colors.success
                         : colors.textMedium,
                   ),
@@ -306,7 +319,9 @@ class _RequestSummaryCard extends ConsumerWidget {
                 MapUtils.openPlaceMarker(
                   request.latitude!,
                   request.longitude!,
-                  label: request.hospitalName.isNotEmpty ? request.hospitalName : request.city,
+                  label: request.hospitalName.isNotEmpty
+                      ? request.hospitalName
+                      : request.city,
                 );
               } else {
                 MapUtils.openNavigationByName(
@@ -360,13 +375,9 @@ class _RequestSummaryCard extends ConsumerWidget {
               child: Row(
                 children: [
                   Icon(
-                    request.isUrgent
-                        ? Icons.schedule
-                        : Icons.event_outlined,
+                    request.isUrgent ? Icons.schedule : Icons.event_outlined,
                     size: 16,
-                    color: request.isUrgent
-                        ? colors.primary
-                        : colors.secondary,
+                    color: request.isUrgent ? colors.primary : colors.secondary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -374,8 +385,8 @@ class _RequestSummaryCard extends ConsumerWidget {
                       request.isUrgent
                           ? Formatters.expiresCountdown(request.expiresAt)
                           : request.plannedDate != null
-                              ? '${Formatters.neededBy(request.plannedDate!)}  •  Expires ${Formatters.dateTimeShort(request.expiresAt)}'
-                              : 'Expires ${Formatters.dateTimeShort(request.expiresAt)}',
+                          ? '${Formatters.neededBy(request.plannedDate!)}  •  Expires ${Formatters.dateTimeShort(request.expiresAt)}'
+                          : 'Expires ${Formatters.dateTimeShort(request.expiresAt)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

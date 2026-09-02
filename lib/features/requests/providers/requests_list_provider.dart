@@ -66,6 +66,8 @@ class RequestListItem {
         return 'Fulfilled';
       case 'closed':
         return 'Closed';
+      case 'expired':
+        return 'Expired';
       case 'active':
         return isExpired ? 'Expired' : 'Active';
       default:
@@ -73,29 +75,27 @@ class RequestListItem {
     }
   }
 
-  factory RequestListItem.fromMap(Map<String, dynamic> map) =>
-      RequestListItem(
-        id: map['id'] as String? ?? '',
-        requesterId: map['requester_id'] as String? ?? '',
-        bloodGroup: map['blood_group'] as String? ?? '',
-        unitsNeeded: map['units_needed'] as int? ?? 1,
-        hospitalName: map['hospital_name'] as String? ?? '',
-        city: map['city'] as String? ?? '',
-        isUrgent: map['is_urgent'] as bool? ?? false,
-        status: map['status'] as String? ?? 'active',
-        createdAt:
-            DateTime.tryParse(map['created_at'] as String? ?? '') ??
-                DateTime.now(),
-        expiresAt:
-            DateTime.tryParse(map['expires_at'] as String? ?? '') ??
-                DateTime.now().add(const Duration(hours: 72)),
-        notes: map['notes'] as String?,
-        reason: RequestReason.fromValue(map['reason'] as String?),
-        reasonNote: map['reason_note'] as String?,
-        plannedDate: map['planned_date'] != null
-            ? DateTime.tryParse(map['planned_date'] as String)
-            : null,
-      );
+  factory RequestListItem.fromMap(Map<String, dynamic> map) => RequestListItem(
+    id: map['id'] as String? ?? '',
+    requesterId: map['requester_id'] as String? ?? '',
+    bloodGroup: map['blood_group'] as String? ?? '',
+    unitsNeeded: map['units_needed'] as int? ?? 1,
+    hospitalName: map['hospital_name'] as String? ?? '',
+    city: map['city'] as String? ?? '',
+    isUrgent: map['is_urgent'] as bool? ?? false,
+    status: map['status'] as String? ?? 'active',
+    createdAt:
+        DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+    expiresAt:
+        DateTime.tryParse(map['expires_at'] as String? ?? '') ??
+        DateTime.now().add(const Duration(hours: 72)),
+    notes: map['notes'] as String?,
+    reason: RequestReason.fromValue(map['reason'] as String?),
+    reasonNote: map['reason_note'] as String?,
+    plannedDate: map['planned_date'] != null
+        ? DateTime.tryParse(map['planned_date'] as String)
+        : null,
+  );
 }
 
 /// Immutable filter state for the Requests screen.
@@ -140,16 +140,15 @@ class RequestListFilterNotifier extends StateNotifier<RequestListFilter> {
     state = state.copyWith(selectedBloodTypes: types);
   }
 
-  void setUrgentOnly(bool value) =>
-      state = state.copyWith(urgentOnly: value);
+  void setUrgentOnly(bool value) => state = state.copyWith(urgentOnly: value);
 
   void clearFilters() => state = RequestListFilter(scope: state.scope);
 }
 
 final requestListFilterProvider =
     StateNotifierProvider<RequestListFilterNotifier, RequestListFilter>((ref) {
-  return RequestListFilterNotifier();
-});
+      return RequestListFilterNotifier();
+    });
 
 /// Requests for the current scope:
 /// - [RequestsScope.all] — active & unexpired community requests (matches the
@@ -159,8 +158,7 @@ final requestListFilterProvider =
 /// Watches only the scope (the server-side part of the query); blood-type and
 /// urgent filters are applied client-side by [filteredRequestsProvider] so
 /// tapping a chip never triggers a refetch.
-final requestsListProvider =
-    FutureProvider<List<RequestListItem>>((ref) async {
+final requestsListProvider = FutureProvider<List<RequestListItem>>((ref) async {
   final scope = ref.watch(requestListFilterProvider.select((f) => f.scope));
   final client = ref.watch(supabaseClientProvider);
 
@@ -191,9 +189,7 @@ final requestsListProvider =
         .gt('expires_at', DateTime.now().toUtc().toIso8601String());
   }
 
-  final data = await query
-      .order('created_at', ascending: false)
-      .limit(100);
+  final data = await query.order('created_at', ascending: false).limit(100);
   return (data as List)
       .map((row) => RequestListItem.fromMap(row as Map<String, dynamic>))
       .toList();

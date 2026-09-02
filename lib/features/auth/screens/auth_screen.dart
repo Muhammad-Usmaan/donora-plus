@@ -598,6 +598,14 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
       setState(() => _serverError = 'Please select a donor classification.');
       return;
     }
+    // Age gate: donors must be 18 or older.
+    if (_selectedRole == 'donor' && _selectedBirthdate != null) {
+      final age = _computeAge(_selectedBirthdate!);
+      if (age < 18) {
+        setState(() => _serverError = 'You must be 18 or older to register as a donor.');
+        return;
+      }
+    }
 
     setState(() {
       _serverError = null;
@@ -660,6 +668,17 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
       }
       _isSubmitting = false;
     });
+  }
+
+  /// Returns the age in whole years for a given [date].
+  int _computeAge(DateTime date) {
+    final now = DateTime.now();
+    int age = now.year - date.year;
+    if (now.month < date.month ||
+        (now.month == date.month && now.day < date.day)) {
+      age--;
+    }
+    return age;
   }
 
   @override

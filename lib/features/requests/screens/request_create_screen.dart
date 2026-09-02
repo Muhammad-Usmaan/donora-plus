@@ -8,7 +8,6 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/request_reasons.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
-import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/urgent_button.dart';
 import '../../../services/location/location_service.dart';
@@ -462,17 +461,74 @@ class _BloodTypeGrid extends StatelessWidget {
       crossAxisCount: 4,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.3,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.55,
       children: AppConstants.bloodTypes.map((type) {
         final isSelected = selected == type;
-        return BloodTypeChip(
+        return _BloodTypePillButton(
           bloodType: type,
-          selected: isSelected,
+          isSelected: isSelected,
           onTap: () => onTap(type),
         );
       }).toList(),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Blood type pill button (large touch-target selector for create/edit form)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _BloodTypePillButton extends StatelessWidget {
+  const _BloodTypePillButton({
+    required this.bloodType,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String bloodType;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: isSelected ? 1.05 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeInOut,
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? colors.primary : colors.card,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: isSelected
+                  ? colors.primary
+                  : colors.border,
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            bloodType,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: isSelected ? Colors.white : colors.textHigh,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
