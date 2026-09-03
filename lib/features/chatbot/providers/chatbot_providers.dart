@@ -7,7 +7,7 @@ import '../../../services/providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import '../../home/providers/home_providers.dart';
 
-// ── Model ─────────────────────────────────────────────────────────────────────
+// ── Models ────────────────────────────────────────────────────────────────────
 
 /// A single message in the chatbot conversation.
 class BotMessage {
@@ -27,6 +27,23 @@ class BotMessage {
   Map<String, String> toHistoryEntry() => {'role': role, 'content': content};
 }
 
+/// Metadata for an AI chatbot conversation thread.
+class AiConversationThread {
+  const AiConversationThread({
+    required this.id,
+    this.title,
+    this.lastMessageAt,
+  });
+
+  final String id;
+  final String? title;
+  final DateTime? lastMessageAt;
+
+  /// Display title — falls back to "New chat" when untitled.
+  String get displayTitle =>
+      (title != null && title!.isNotEmpty) ? title! : 'New chat';
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 /// Immutable state for the chatbot conversation.
@@ -36,12 +53,24 @@ class ChatbotState {
     this.isAwaitingResponse = false,
     this.isLoading = false,
     this.error,
+    this.threads = const [],
+    this.currentConversationId,
+    this.title = '',
   });
 
   final List<BotMessage> messages;
   final bool isAwaitingResponse;
   final bool isLoading;
   final String? error;
+
+  /// All AI conversation threads for the current user.
+  final List<AiConversationThread> threads;
+
+  /// The active conversation row ID (null before first load).
+  final String? currentConversationId;
+
+  /// Display title for the current conversation.
+  final String title;
 
   bool get isEmpty => messages.isEmpty;
 
@@ -55,12 +84,19 @@ class ChatbotState {
     bool? isLoading,
     String? error,
     bool clearError = false,
+    List<AiConversationThread>? threads,
+    String? currentConversationId,
+    String? title,
   }) {
     return ChatbotState(
       messages: messages ?? this.messages,
       isAwaitingResponse: isAwaitingResponse ?? this.isAwaitingResponse,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
+      threads: threads ?? this.threads,
+      currentConversationId:
+          currentConversationId ?? this.currentConversationId,
+      title: title ?? this.title,
     );
   }
 }
@@ -70,14 +106,61 @@ class ChatbotState {
 class ChatbotNotifier extends StateNotifier<ChatbotState> {
   ChatbotNotifier(this._service, this._ref)
       : super(const ChatbotState(isLoading: true)) {
-    _loadHistory();
+    _init();
   }
 
   final ChatbotService _service;
   final Ref _ref;
   String? _conversationId;
 
-  Future<void> _loadHistory() async {
+  // ── Initialisation ────────────────────────────────────────────────
+
+  Future<void> _init() async {
+    await _loadThreads();
+    if (!mounted) return;
+    if (state.threads.isNotEmpty) {
+      _conversationId = state.threads.first.id;
+      await _loadMessagesForConversation(_conversationId!,
+          setAsCurrent: true);
+    } else {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  /// Fetches all AI conversation threads for the current user,
+  /// sorted by [last_message_at] descending.
+  Future<void> _loadThreads() async {
+    final user = _ref.read(currentUserProvider);
+    if (user == null) return;
+    try {
+      final client = _ref.read(supabaseClientProvider);
+      final rows = await client
+          .from('conversations')
+          .select('id, title, last_message_at')
+          .eq('participant_1_id', user.id)
+          .isFilter('participant_2_id', null)
+          .order('last_message_at', ascending: false);
+
+      final threads = (rows as List).map((row) {
+        return AiConversationThread(
+          id: row['id'] as String,
+          title: row['title'] as String?,
+          lastMessageAt: row['last_message_at'] != null
+              ? DateTime.tryParse(row['last_message_at'] as String)
+              : null,
+        );
+      }).toList();
+
+      state = state.copyWith(threads: threads);
+    } catch (_) {}
+  }
+
+  /// Loads messages for a specific conversation and optionally updates
+  /// the current-conversation pointer in state.
+  Future<void> _loadMessagesForConversation(
+    String conversationId, {
+    bool setAsCurrent = false,
+  }) async {
     try {
       final user = _ref.read(currentUserProvider);
       if (user == null) {
@@ -86,58 +169,94 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       }
       final client = _ref.read(supabaseClientProvider);
 
-      // Fetch or create user's AI conversation
-      final convRow = await client
-          .from('conversations')
-          .select('id')
-          .eq('participant_1_id', user.id)
-          .isFilter('participant_2_id', null)
-          .maybeSingle();
-
-      if (convRow != null) {
-        _conversationId = convRow['id'] as String?;
-      } else {
-        final newConv = await client
-            .from('conversations')
-            .insert({
-              'participant_1_id': user.id,
-              'participant_2_id': null,
-            })
-            .select('id')
-            .single();
-        _conversationId = newConv['id'] as String?;
+      if (setAsCurrent) {
+        _conversationId = conversationId;
       }
 
-      if (_conversationId != null) {
-        final msgRows = await client
-            .from('messages')
-            .select('*')
-            .eq('conversation_id', _conversationId!)
-            .order('created_at', ascending: true);
+      final msgRows = await client
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', ascending: true);
 
-        final loaded = (msgRows as List).map((row) {
-          final sId = row['sender_id'] as String?;
-          final isUser = sId == user.id;
-          final content = row['content'] as String? ?? '';
-          final time = DateTime.tryParse(row['created_at'] as String? ?? '') ??
-              DateTime.now();
-          return BotMessage(
-            role: isUser ? 'user' : 'assistant',
-            content: content,
-            timestamp: time,
-          );
-        }).toList();
+      if (!mounted) return;
 
-        state = state.copyWith(
-          messages: loaded,
-          isLoading: false,
+      final loaded = (msgRows as List).map((row) {
+        final sId = row['sender_id'] as String?;
+        final isUser = sId == user.id;
+        final content = row['content'] as String? ?? '';
+        final time =
+            DateTime.tryParse(row['created_at'] as String? ?? '') ??
+                DateTime.now();
+        return BotMessage(
+          role: isUser ? 'user' : 'assistant',
+          content: content,
+          timestamp: time,
         );
-        return;
-      }
+      }).toList();
+
+      // Resolve the thread title.
+      final thread = state.threads
+          .cast<AiConversationThread?>()
+          .firstWhere(
+            (t) => t!.id == conversationId,
+            orElse: () => null,
+          );
+      final title = thread?.title ?? '';
+
+      state = state.copyWith(
+        messages: loaded,
+        isLoading: false,
+        currentConversationId: conversationId,
+        title: title,
+        clearError: true,
+      );
     } catch (_) {
-      // Fallback gracefully on network / auth error
+      state = state.copyWith(isLoading: false);
     }
-    state = state.copyWith(isLoading: false);
+  }
+
+  /// Switches to an existing conversation thread and loads its messages.
+  Future<void> switchConversation(String conversationId) async {
+    if (conversationId == _conversationId) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    await _loadMessagesForConversation(conversationId,
+        setAsCurrent: true);
+  }
+
+  /// Creates a brand-new conversation row and prepares the UI for a
+  /// fresh chat.  The row is persisted immediately so it appears in the
+  /// recent-chats list even before the first message is sent.
+  Future<void> newChat() async {
+    final user = _ref.read(currentUserProvider);
+    if (user == null) return;
+
+    try {
+      final client = _ref.read(supabaseClientProvider);
+      final newConv = await client
+          .from('conversations')
+          .insert({
+            'participant_1_id': user.id,
+            'participant_2_id': null,
+          })
+          .select('id')
+          .single();
+      final newId = newConv['id'] as String;
+
+      _conversationId = newId;
+
+      final newThread = AiConversationThread(
+        id: newId,
+        lastMessageAt: DateTime.now(),
+      );
+      state = state.copyWith(
+        messages: const [],
+        currentConversationId: newId,
+        threads: [newThread, ...state.threads],
+        title: '',
+        clearError: true,
+      );
+    } catch (_) {}
   }
 
   /// Builds a plain-text summary of the current user's profile for the
@@ -158,8 +277,14 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       parts.add('Verified: ${profile.isVerified ? "Yes" : "No"}');
       if (profile.isTopDonor) parts.add('Top donor: Yes');
       if (profile.lastDonationDate != null) {
-        final days =
-            DateTime.now().difference(profile.lastDonationDate!).inDays;
+        // UTC-only math to stay consistent with the Supabase admin panel.
+        final nowUtc = DateTime.now().toUtc();
+        final lastUtc = profile.lastDonationDate!.toUtc();
+        final days = DateTime.utc(
+              nowUtc.year, nowUtc.month, nowUtc.day,
+            ).difference(
+              DateTime.utc(lastUtc.year, lastUtc.month, lastUtc.day),
+            ).inDays;
         parts.add(
             'Last donation: ${profile.lastDonationDate!.toIso8601String()} '
             '($days days ago)');
@@ -178,26 +303,26 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     if (_conversationId != null) return;
     try {
       final client = _ref.read(supabaseClientProvider);
-      final convRow = await client
+      final newConv = await client
           .from('conversations')
+          .insert({
+            'participant_1_id': userId,
+            'participant_2_id': null,
+          })
           .select('id')
-          .eq('participant_1_id', userId)
-          .isFilter('participant_2_id', null)
-          .maybeSingle();
+          .single();
+      final newId = newConv['id'] as String;
+      _conversationId = newId;
 
-      if (convRow != null) {
-        _conversationId = convRow['id'] as String?;
-      } else {
-        final newConv = await client
-            .from('conversations')
-            .insert({
-              'participant_1_id': userId,
-              'participant_2_id': null,
-            })
-            .select('id')
-            .single();
-        _conversationId = newConv['id'] as String?;
-      }
+      // Add the new thread to the local list.
+      final newThread = AiConversationThread(
+        id: newId,
+        lastMessageAt: DateTime.now(),
+      );
+      state = state.copyWith(
+        currentConversationId: newId,
+        threads: [newThread, ...state.threads],
+      );
     } catch (_) {}
   }
 
@@ -222,22 +347,44 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 
     if (user != null) {
       await _ensureConversation(user.id);
+      if (!mounted) return;
       if (_conversationId != null) {
         try {
+          final isFirstMessage = state.messages.length == 1;
           await client.from('messages').insert({
             'conversation_id': _conversationId,
             'sender_id': user.id,
             'content': text.trim(),
           });
-          await client.from('conversations').update({
+          final updates = <String, dynamic>{
             'updated_at': DateTime.now().toUtc().toIso8601String(),
-          }).eq('id', _conversationId!);
+            'last_message_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          // Auto-generate a title from the first user message.
+          if (isFirstMessage && state.title.isEmpty) {
+            final titleText = text.trim().length > 40
+                ? '${text.trim().substring(0, 40)}...'
+                : text.trim();
+            updates['title'] = titleText;
+            state = state.copyWith(title: titleText);
+            _updateThreadInList(_conversationId!,
+                title: titleText,
+                lastMessageAt: DateTime.now());
+          } else {
+            _updateThreadInList(_conversationId!,
+                lastMessageAt: DateTime.now());
+          }
+          await client
+              .from('conversations')
+              .update(updates)
+              .eq('id', _conversationId!);
         } catch (_) {}
       }
     }
 
     try {
       final userContext = await _buildUserContext();
+      if (!mounted) return;
 
       final reply = await _service.sendMessage(
         text.trim(),
@@ -246,6 +393,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
         userContext: userContext,
       );
 
+      if (!mounted) return;
       final botMessage = BotMessage(
         role: 'assistant',
         content: reply,
@@ -266,7 +414,10 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
           });
           await client.from('conversations').update({
             'updated_at': DateTime.now().toUtc().toIso8601String(),
+            'last_message_at': DateTime.now().toUtc().toIso8601String(),
           }).eq('id', _conversationId!);
+          _updateThreadInList(_conversationId!,
+              lastMessageAt: DateTime.now());
         } catch (_) {}
       }
     } catch (e) {
@@ -284,7 +435,32 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
     }
   }
 
-  /// Clears the entire conversation both locally and in Supabase.
+  /// Moves the given thread to the top of the list with updated metadata.
+  void _updateThreadInList(
+    String conversationId, {
+    String? title,
+    DateTime? lastMessageAt,
+  }) {
+    final updated = state.threads.map((t) {
+      if (t.id != conversationId) return t;
+      return AiConversationThread(
+        id: t.id,
+        title: title ?? t.title,
+        lastMessageAt: lastMessageAt ?? t.lastMessageAt,
+      );
+    }).toList();
+    // Bubble the active thread to the top.
+    updated.sort((a, b) {
+      if (a.id == conversationId) return -1;
+      if (b.id == conversationId) return 1;
+      final aTime = a.lastMessageAt ?? DateTime(1970);
+      final bTime = b.lastMessageAt ?? DateTime(1970);
+      return bTime.compareTo(aTime);
+    });
+    state = state.copyWith(threads: updated);
+  }
+
+  /// Clears messages in the current conversation (local + Supabase).
   Future<void> clear() async {
     state = state.copyWith(messages: const []);
     if (_conversationId != null) {
@@ -304,6 +480,17 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 final chatbotProvider =
     StateNotifierProvider<ChatbotNotifier, ChatbotState>((ref) {
   final service = ref.watch(chatbotServiceProvider);
+
+  // Invalidate the chatbot provider whenever the signed-in user changes
+  // (logout or account switch).  Without this the previous user's
+  // conversation threads, messages, and _conversationId leak into the
+  // next session because the StateNotifier is not auto-disposed.
+  ref.listen(currentUserProvider, (previous, next) {
+    if (previous != null && previous.id != next?.id) {
+      ref.invalidateSelf();
+    }
+  });
+
   return ChatbotNotifier(service, ref);
 });
 

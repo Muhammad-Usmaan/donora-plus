@@ -59,8 +59,8 @@ class NotificationSettings {
 ///   pushEnabled        → controls FCM token registration (no DB column)
 ///   urgentRequests     → profiles.notify_new_requests
 ///   newMessages        → profiles.notify_messages
-///   verificationUpdates → (local-only for now; no separate server column)
-///   topDonorUpdates    → (local-only for now; no separate server column)
+///   verificationUpdates → profiles.notify_verification_updates
+///   topDonorUpdates    → profiles.notify_top_donor_updates
 class NotificationSettingsNotifier
     extends StateNotifier<NotificationSettings> {
   NotificationSettingsNotifier(this._prefs, this._supabase)
@@ -75,16 +75,12 @@ class NotificationSettingsNotifier
   static const _keyPush = 'notif.push_enabled';
   static const _keyUrgent = 'notif.urgent_requests';
   static const _keyMessages = 'notif.new_messages';
-  static const _keyVerification = 'notif.verification_updates';
-  static const _keyTopDonor = 'notif.top_donor_updates';
 
   void _load() {
     state = NotificationSettings(
       pushEnabled: _prefs.getBool(_keyPush) ?? true,
       urgentRequests: _prefs.getBool(_keyUrgent) ?? true,
       newMessages: _prefs.getBool(_keyMessages) ?? true,
-      verificationUpdates: _prefs.getBool(_keyVerification) ?? true,
-      topDonorUpdates: _prefs.getBool(_keyTopDonor) ?? true,
     );
   }
 
@@ -98,7 +94,8 @@ class NotificationSettingsNotifier
       final row = await _supabase
           .from('profiles')
           .select(
-              'notify_new_requests, notify_messages, notify_request_updates')
+              'notify_new_requests, notify_messages, notify_request_updates, '
+              'notify_verification_updates, notify_top_donor_updates')
           .eq('id', userId)
           .maybeSingle();
 
@@ -108,23 +105,21 @@ class NotificationSettingsNotifier
           row['notify_new_requests'] as bool? ?? state.urgentRequests;
       final serverMessages =
           row['notify_messages'] as bool? ?? state.newMessages;
-      // notify_request_updates covers both verification + request update
-      // categories on the server; map it to both local toggles.
-      final serverRequestUpdates =
-          row['notify_request_updates'] as bool? ?? state.verificationUpdates;
+      final serverVerification =
+          row['notify_verification_updates'] as bool? ?? state.verificationUpdates;
+      final serverTopDonor =
+          row['notify_top_donor_updates'] as bool? ?? state.topDonorUpdates;
 
       state = state.copyWith(
         urgentRequests: serverNewRequests,
         newMessages: serverMessages,
-        verificationUpdates: serverRequestUpdates,
-        topDonorUpdates: serverRequestUpdates,
+        verificationUpdates: serverVerification,
+        topDonorUpdates: serverTopDonor,
       );
 
       // Cache locally so the next cold-start is instant.
       await _prefs.setBool(_keyUrgent, serverNewRequests);
       await _prefs.setBool(_keyMessages, serverMessages);
-      await _prefs.setBool(_keyVerification, serverRequestUpdates);
-      await _prefs.setBool(_keyTopDonor, serverRequestUpdates);
     } catch (e) {
       debugPrint('NotificationSettings: failed to load from server: $e');
     }
@@ -163,16 +158,12 @@ class NotificationSettingsNotifier
 
   Future<void> setVerificationUpdates(bool value) async {
     state = state.copyWith(verificationUpdates: value);
-    await _prefs.setBool(_keyVerification, value);
-    // Mapped to notify_request_updates on the server.
-    await _persistToServer({'notify_request_updates': value});
+    await _persistToServer({'notify_verification_updates': value});
   }
 
   Future<void> setTopDonorUpdates(bool value) async {
     state = state.copyWith(topDonorUpdates: value);
-    await _prefs.setBool(_keyTopDonor, value);
-    // Mapped to notify_request_updates on the server.
-    await _persistToServer({'notify_request_updates': value});
+    await _persistToServer({'notify_top_donor_updates': value});
   }
 }
 

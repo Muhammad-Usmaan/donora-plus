@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
@@ -242,13 +243,13 @@ class _ProfileBody extends ConsumerWidget {
           const SizedBox(height: 24),
         ],
 
-        // â”€â”€ My Requests (seeker only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // â”€â”€ Request History (seeker only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (profile.activeRole == 'seeker') ...[
           AppCard(
             padding: EdgeInsets.zero,
             child: _SettingsRow(
-              icon: Icons.list_alt_outlined,
-              label: 'My Requests',
+              icon: PhosphorIconsRegular.clockCounterClockwise,
+              label: 'Request History',
               onTap: () => context.pushNamed(RouteNames.myRequests),
             ),
           ),
@@ -1179,15 +1180,76 @@ class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
 
 // â”€â”€ Logout row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-class _LogoutRow extends ConsumerWidget {
+class _LogoutRow extends ConsumerStatefulWidget {
   const _LogoutRow();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LogoutRow> createState() => _LogoutRowState();
+}
+
+class _LogoutRowState extends ConsumerState<_LogoutRow> {
+  bool _isLoggingOut = false;
+
+  Future<void> _handleLogout() async {
+    if (_isLoggingOut) return;
+
+    // Confirm before proceeding — matches the delete-account flow.
+    final confirmed = await showConfirmDialog(
+      context: context,
+      title: 'Log out?',
+      message: 'Are you sure you want to log out?',
+      confirmLabel: 'Log Out',
+      icon: Icons.logout,
+    );
+    if (!confirmed) return;
+
+    setState(() => _isLoggingOut = true);
+
+    // Non-dismissible loading dialog while sign-out completes.
+    // Matches the pattern used by _DeleteAccountRow.
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AppDialog(
+          title: 'Logging out',
+          message: 'Please wait\u2026',
+          icon: Icons.logout,
+          iconColor: context.colors.textHigh,
+          actions: const [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await ref.read(logoutActionProvider)();
+    } catch (_) {
+      // Logout failed — dismiss loading dialog and show error.
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+        context.showSnackBar(
+          'Failed to log out. Please try again.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.colors;
 
     return InkWell(
-      onTap: () => ref.read(logoutActionProvider)(),
+      onTap: _isLoggingOut ? null : _handleLogout,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
@@ -1251,15 +1313,43 @@ class _DeleteAccountRow extends ConsumerWidget {
       icon: Icons.delete_outline,
       destructive: true,
     ).then((confirmed) async {
-      if (confirmed) {
-        final success =
-            await ref.read(deleteAccountActionProvider)();
-        if (context.mounted && !success) {
-          context.showSnackBar(
-            'Failed to delete account. Please try again.',
-            isError: true,
-          );
-        }
+      if (!confirmed) return;
+
+      // Show a non-dismissible loading dialog while the Edge Function
+      // processes the deletion (cleans up data + removes auth user).
+      if (!context.mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AppDialog(
+            title: 'Deleting your account',
+            message: 'Please wait\u2026',
+            icon: Icons.delete_outline,
+            iconColor: context.colors.urgent,
+            actions: const [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final success =
+          await ref.read(deleteAccountActionProvider)();
+
+      // Close the loading dialog.
+      if (context.mounted) Navigator.of(context).pop();
+
+      if (context.mounted && !success) {
+        context.showSnackBar(
+          'Failed to delete account. Please try again.',
+          isError: true,
+        );
       }
     });
   }

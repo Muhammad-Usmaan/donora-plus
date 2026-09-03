@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -293,9 +294,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
           // ── Forgot password ─────────────────────────────────────
           Center(
             child: TextButton(
-              onPressed: () {
-                // Navigate to password-reset screen.
-              },
+              onPressed: () => context.goNamed(RouteNames.forgotPassword),
               child: Text(
                 'Forgot password?',
                 style: context.textTheme.labelLarge?.copyWith(
@@ -354,6 +353,7 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
 
   String? _serverError;
   String? _phoneError;
+  String? _emailError;
 
   @override
   void initState() {
@@ -437,6 +437,55 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
 
   void _clearServer() {
     if (_serverError != null) setState(() => _serverError = null);
+  }
+
+  /// Builds the inline email-already-registered error widget with a
+  /// tappable "Log in" link that switches to the login tab and pre-fills
+  /// the email field.
+  Widget _buildEmailErrorInline() {
+    final colors = context.colors;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: 'This email is already registered. ',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.urgent,
+              ),
+            ),
+            TextSpan(
+              text: 'Log in',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.primary,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  // Switch to login tab and pre-fill the email.
+                  final authScreenState =
+                      context.findAncestorStateOfType<_AuthScreenState>();
+                  if (authScreenState != null) {
+                    authScreenState.setState(() {
+                      authScreenState._mode = AuthMode.login;
+                      authScreenState._loginEmailCtrl.text =
+                          widget.emailCtrl.text.trim();
+                    });
+                  }
+                },
+            ),
+            TextSpan(
+              text: ' instead, or reset your password if you forgot it.',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: colors.urgent,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _pickBirthdate() async {
@@ -661,10 +710,17 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
     if (!mounted) return;
     final state = ref.read(signupNotifierProvider);
     setState(() {
+      _emailError = null;
+      _phoneError = null;
       _serverError = state.serverError;
-      if (state.serverError != null &&
-          state.serverError!.contains('already registered')) {
-        _phoneError = state.serverError;
+
+      // Route field-specific errors to inline error text.
+      if (state.serverError != null) {
+        if (state.serverError!.contains('email is already registered')) {
+          _emailError = state.serverError;
+        } else if (state.serverError!.contains('phone number is already registered')) {
+          _phoneError = state.serverError;
+        }
       }
       _isSubmitting = false;
     });
@@ -688,7 +744,12 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
         ref.watch(signupNotifierProvider).isLoading || _isSubmitting;
     final stateError = ref.watch(signupNotifierProvider).serverError;
     final signupSuccess = ref.watch(signupNotifierProvider).success;
-    final displayError = _serverError ?? stateError;
+    final rawError = _serverError ?? stateError;
+    // Suppress the top banner for field-specific errors (shown inline).
+    final isFieldError = rawError != null &&
+        (rawError.contains('email is already registered') ||
+            rawError.contains('phone number is already registered'));
+    final displayError = isFieldError ? null : rawError;
 
     // Show confirmation message after successful signup
     if (signupSuccess) {
@@ -758,14 +819,25 @@ class _SignupFormState extends ConsumerState<_SignupForm> {
             textInputAction: TextInputAction.next,
             onChanged: (_) {
               _clearServer();
+              if (_emailError != null) setState(() => _emailError = null);
               if (mounted) setState(() {});
             },
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Email',
-              prefixIcon: PhosphorIcon(PhosphorIconsRegular.envelopeSimple),
+              prefixIcon: const PhosphorIcon(PhosphorIconsRegular.envelopeSimple),
+              // Red border when email-already-registered error is active.
+              enabledBorder: _emailError != null
+                  ? OutlineInputBorder(
+                      borderSide: BorderSide(color: colors.urgent),
+                    )
+                  : null,
             ),
             validator: Validators.email,
           ),
+          if (_emailError != null) ...[
+            const SizedBox(height: 4),
+            _buildEmailErrorInline(),
+          ],
           const SizedBox(height: 16),
 
           // ── Phone ───────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -43,6 +44,19 @@ class LocationService {
     return Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.medium,
+      ),
+    );
+  }
+
+  /// Returns a stream of position updates, or null if permission denied.
+  /// Emits updates every 10 seconds or 50 meters of movement.
+  Stream<Position>? getPositionStream() async* {
+    final hasPermission = await checkPermission();
+    if (!hasPermission) return;
+    yield* Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 50, // Minimum 50 meters between updates
       ),
     );
   }

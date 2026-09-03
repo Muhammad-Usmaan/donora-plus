@@ -52,7 +52,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final suspended =
           await ref.read(authServiceProvider).checkSuspended(user.id);
-      if (suspended && mounted) {
+      if (suspended == true && mounted) {
         await ref.read(authServiceProvider).signOut();
         if (mounted) {
           context.go(RoutePaths.auth);

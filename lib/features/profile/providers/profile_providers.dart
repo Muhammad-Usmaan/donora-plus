@@ -8,6 +8,7 @@ import '../../../services/providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import '../../../services/supabase/storage_service_provider.dart';
 import '../../home/providers/home_providers.dart';
+import '../../chatbot/providers/chatbot_providers.dart';
 import '../../requests/providers/requests_list_provider.dart';
 
 // ── Logout action ─────────────────────────────────────────────────────────────
@@ -37,6 +38,10 @@ class LogoutAction {
     } catch (_) {
       // Sign out locally even if server call fails.
     }
+
+    // Clear user-scoped state so the next login starts fresh.
+    _ref.invalidate(chatbotProvider);
+
     // Navigate to auth — the router redirect guard handles this
     // automatically once currentUser is null, but we go explicitly.
     final router = _ref.read(routerProvider);
@@ -58,23 +63,45 @@ class DeleteAccountAction {
   DeleteAccountAction(this._ref);
   final Ref _ref;
 
-  /// Deletes the current user's profile and auth account.
+  /// Deletes the current user's account via the delete-user-account Edge
+  /// Function, which removes the Auth user (fixing the orphan bug) and
+  /// cleans up all related data.
   /// Returns true on success.
   Future<bool> call() async {
     final user = _ref.read(currentUserProvider);
     if (user == null) return false;
 
     try {
+      // Best-effort: clear FCM device token before the session is gone.
+      final userId = user.id;
+      try {
+        await _ref.read(fcmServiceProvider).clearToken(userId: userId);
+      } catch (_) {
+        // Push cleanup is best-effort — never block deletion.
+      }
+
       final client = _ref.read(supabaseClientProvider);
 
-      // Delete the profile row (RLS should cascade or we call an RPC).
-      await client.from('profiles').delete().eq('id', user.id);
+      // Call the Edge Function which:
+      //   1. Cleans up device_tokens, donor_reports, storage objects
+      //   2. Deletes the profile row
+      //   3. Deletes the Auth user via Admin API (the critical step)
+      final response = await client.functions.invoke(
+        'delete-user-account',
+        body: {'userId': user.id},
+      );
 
-      // Sign out — the actual account deletion would be done via
-      // Supabase Admin API (server-side) or an Edge Function.
-      // For MVP, we delete the profile and sign out.
+      if (response.data?['success'] != true) {
+        return false;
+      }
+
+      // Sign out locally (the Edge Function already deleted the auth user,
+      // but we need to clear the local session).
       final authService = _ref.read(authServiceProvider);
       await authService.signOut();
+
+      // Clear user-scoped state so the next login starts fresh.
+      _ref.invalidate(chatbotProvider);
 
       final router = _ref.read(routerProvider);
       router.go(RoutePaths.auth);

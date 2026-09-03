@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../services/deep_link_handler.dart';
 import 'route_names.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/auth_screen.dart';
+import '../../features/auth/screens/forgot_password_screen.dart';
+import '../../features/auth/screens/set_new_password_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../core/providers/auth_providers.dart';
 import '../../features/verification/screens/verification_screen.dart';
@@ -76,6 +79,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: RouteNames.auth,
         path: RoutePaths.auth,
         builder: (_, _) => const AuthScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.forgotPassword,
+        path: RoutePaths.forgotPassword,
+        builder: (_, _) => const ForgotPasswordScreen(),
+      ),
+      // Password-reset deep-link target.  The recovery session is created
+      // by supabase_flutter when the user taps the reset link in their email.
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.resetPassword,
+        path: RoutePaths.resetPassword,
+        builder: (_, _) => const SetNewPasswordScreen(),
       ),
 
       // ── Bottom-nav shell (StatefulShellRoute preserves each tab) ──
@@ -242,7 +259,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuthFlow = path == RoutePaths.splash ||
           path == RoutePaths.onboarding ||
           path == RoutePaths.auth ||
+          path == RoutePaths.forgotPassword ||
+          path == RoutePaths.resetPassword ||
           path == RoutePaths.locationPicker;
+
+      // Password-recovery deep link: Supabase has exchanged the PKCE code
+      // for a recovery session.  Force-navigate to the reset-password screen
+      // regardless of other redirect rules.
+      if (DeepLinkHandler.isPasswordRecoveryActive &&
+          path != RoutePaths.resetPassword) {
+        return RoutePaths.resetPassword;
+      }
 
       // Signed-out user trying to access a protected route → auth.
       if (user == null && !isAuthFlow) return RoutePaths.auth;

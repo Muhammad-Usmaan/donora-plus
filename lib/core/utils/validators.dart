@@ -34,6 +34,29 @@ class Validators {
     return null;
   }
 
+  /// Password must be at least 6 characters (matches signup constraint).
+  static String? password(String? value) {
+    final requiredError = required(value, 'Password');
+    if (requiredError != null) return requiredError;
+    return minLength(value, 6, 'Password');
+  }
+
+  /// Confirms [confirmValue] matches [password].
+  ///
+  /// Usage in a TextFormField:
+  /// ```dart
+  /// validator: (v) => Validators.confirmPassword(v, passwordController.text),
+  /// ```
+  static String? confirmPassword(String? confirmValue, String password) {
+    if (confirmValue == null || confirmValue.isEmpty) {
+      return 'Please confirm your password';
+    }
+    if (confirmValue != password) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }
+
   static String? bloodType(String? value) {
     const valid = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
     if (value == null || !valid.contains(value)) {

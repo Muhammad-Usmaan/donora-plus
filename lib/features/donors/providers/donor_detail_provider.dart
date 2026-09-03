@@ -72,7 +72,15 @@ class DonorProfile {
     if (!showLastDonationDate) return true;
     final last = lastDonationDate;
     if (last == null) return true;
-    return DateTime.now().difference(last).inDays >= 90;
+    // UTC-only math to stay consistent with the Supabase admin panel.
+    final nowUtc = DateTime.now().toUtc();
+    final lastUtc = last.toUtc();
+    final daysSince = DateTime.utc(
+          nowUtc.year, nowUtc.month, nowUtc.day,
+        ).difference(
+          DateTime.utc(lastUtc.year, lastUtc.month, lastUtc.day),
+        ).inDays;
+    return daysSince >= 90;
   }
 
   factory DonorProfile.fromMap(Map<String, dynamic> map) => DonorProfile(
@@ -89,7 +97,7 @@ class DonorProfile {
         bio: map['bio'] as String?,
         totalDonations: map['total_donations'] as int?,
         lastDonationDate: map['last_donation_date'] != null
-            ? DateTime.tryParse(map['last_donation_date'] as String)
+            ? DateTime.tryParse(map['last_donation_date'] as String)?.toUtc()
             : null,
         showLastDonationDate:
             map['show_last_donation_date'] as bool? ?? false,
@@ -110,7 +118,7 @@ final donorDetailProvider =
     FutureProvider.family<DonorProfile, String>((ref, donorId) async {
   final client = ref.watch(supabaseClientProvider);
   final data = await client
-      .from('profiles')
+      .from('profiles_public')
       .select()
       .eq('id', donorId)
       .maybeSingle();

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
@@ -14,9 +15,9 @@ import '../providers/profile_providers.dart';
 
 /// Dedicated screen listing all blood requests created by the current user.
 ///
-/// Reached from the Profile screen's "My Requests" row. Each card mirrors
-/// the request-list styling used elsewhere (blood-type chip, urgency badge,
-/// status pill, expiry / planned-date label).
+/// Reached from the Profile screen's "Request History" row. Each card shows
+/// a status badge with icon, blood-type chip, urgency badge, expiry /
+/// planned-date label, and reason pill.
 class MyRequestsScreen extends ConsumerWidget {
   const MyRequestsScreen({super.key});
 
@@ -31,7 +32,7 @@ class MyRequestsScreen extends ConsumerWidget {
         backgroundColor: colors.surface,
         elevation: 0,
         scrolledUnderElevation: 0.5,
-        title: const Text('My Requests'),
+        title: const Text('Request History'),
         centerTitle: false,
       ),
       body: requestsAsync.when(
@@ -96,26 +97,41 @@ class _EmptyView extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_outlined, size: 48, color: colors.textMedium),
-            const SizedBox(height: 16),
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: colors.secondaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: PhosphorIcon(
+                PhosphorIconsRegular.clockCounterClockwise,
+                size: 40,
+                color: colors.secondary,
+              ),
+            ),
+            const SizedBox(height: 24),
             Text(
-              "You haven't created any requests yet.",
-              textAlign: TextAlign.center,
+              'No requests yet',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
                 color: colors.textHigh,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'When you create a blood request it will appear here.',
+              'When you create a blood request it will\nappear here.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: colors.textMedium),
+              style: TextStyle(
+                fontSize: 14,
+                color: colors.textMedium,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
@@ -295,7 +311,7 @@ class _PlannedBadge extends StatelessWidget {
   }
 }
 
-// ── Status chip ──────────────────────────────────────────────────────────────
+// ── Status badge ─────────────────────────────────────────────────────────────
 
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.request});
@@ -306,20 +322,33 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
+    // Map DB status to display label, color, and Phosphor icon.
+    // Uses only existing design-system color tokens — no new hex values.
+    final String label;
     final Color color;
+    final IconData icon;
+
     switch (request.status) {
-      case 'fulfilled':
-        color = colors.secondary;
-      case 'closed':
-        color = colors.textMedium;
-      case 'expired':
-        color = colors.warning;
       case 'active':
-        color = request.isExpired ? colors.warning : colors.success;
-      case 'accepted':
-        color = colors.primary;
-      default:
+        label = 'Pending';
+        color = colors.warning;
+        icon = PhosphorIconsRegular.clock;
+      case 'fulfilled':
+        label = 'Fulfilled';
+        color = colors.success;
+        icon = PhosphorIconsRegular.checkCircle;
+      case 'expired':
+        label = 'Expired';
         color = colors.textMedium;
+        icon = PhosphorIconsRegular.xCircle;
+      case 'closed':
+        label = 'Cancelled';
+        color = colors.textMedium;
+        icon = PhosphorIconsRegular.xCircle;
+      default:
+        label = request.statusLabel;
+        color = colors.textMedium;
+        icon = PhosphorIconsRegular.circle;
     }
 
     return Container(
@@ -328,13 +357,20 @@ class _StatusChip extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        request.statusLabel,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PhosphorIcon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

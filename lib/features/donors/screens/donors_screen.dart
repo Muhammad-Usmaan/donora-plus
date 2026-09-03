@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/donor_status_chip.dart';
 import '../../../core/widgets/verified_badge.dart';
+import '../../home/providers/home_providers.dart';
 import '../providers/donors_list_provider.dart';
 
 /// Donor list screen — browse, search, and filter donors.
@@ -43,10 +45,18 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
     final donorsAsync = ref.watch(donorsListProvider);
     final filter = ref.watch(donorListFilterProvider);
     final donors = ref.watch(filteredDonorsProvider);
+    final activeRole = ref.watch(activeRoleProvider);
+    final profileAsync = ref.watch(userProfileProvider);
+    final profile = profileAsync.valueOrNull;
+
+    // Show the "Compatible with me" toggle only for seekers with a blood group.
+    final showCompatToggle =
+        activeRole == 'seeker' && (profile?.bloodGroup.isNotEmpty ?? false);
 
     final hasActiveFilters = filter.query.trim().isNotEmpty ||
         filter.isFilteringBlood ||
-        filter.verifiedOnly;
+        filter.verifiedOnly ||
+        filter.compatibleWithMe;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -110,6 +120,15 @@ class _DonorsScreenState extends ConsumerState<DonorsScreen> {
                         .read(donorListFilterProvider.notifier)
                         .setVerifiedOnly(!filter.verifiedOnly),
                   ),
+                  if (showCompatToggle) ...[
+                    const SizedBox(width: 8),
+                    _CompatibleWithMePill(
+                      selected: filter.compatibleWithMe,
+                      onTap: () => ref
+                          .read(donorListFilterProvider.notifier)
+                          .setCompatibleWithMe(!filter.compatibleWithMe),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -226,6 +245,53 @@ class _VerifiedOnlyPill extends StatelessWidget {
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: selected ? Colors.white : colors.secondary,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Compatible-with-me filter pill ────────────────────────────────────────────
+
+class _CompatibleWithMePill extends StatelessWidget {
+  const _CompatibleWithMePill({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? colors.primary : colors.primaryContainer,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.bloodtype,
+              size: 16,
+              color: selected ? Colors.white : colors.primary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Compatible with me',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : colors.primary,
                 height: 1.2,
               ),
             ),

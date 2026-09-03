@@ -134,7 +134,7 @@ class HelpFaqScreen extends StatelessWidget {
               leading: Icon(Icons.support_agent,
                   size: 24, color: colors.secondary),
               title: const Text('Contact Support'),
-              subtitle: const Text('support@donora.app'),
+              subtitle: const Text('donoraplus@gmail.com'),
               trailing: Icon(Icons.chevron_right,
                   size: 20, color: colors.textMedium),
               onTap: () => context.pop(),

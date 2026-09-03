@@ -69,7 +69,7 @@ class UserProfile {
         ? DateTime.tryParse(map['date_of_birth'] as String)
         : null,
     lastDonationDate: map['last_donation_date'] != null
-        ? DateTime.tryParse(map['last_donation_date'] as String)
+        ? DateTime.tryParse(map['last_donation_date'] as String)?.toUtc()
         : null,
     profilePhotoUrl: map['profile_photo_url'] as String?,
     totalDonations: map['total_donations'] as int? ?? 0,
@@ -329,7 +329,7 @@ final nearbyDonorsProvider = FutureProvider<List<Map<String, dynamic>>>((
   final client = ref.watch(supabaseClientProvider);
 
   var query = client
-      .from('profiles')
+      .from('profiles_public')
       .select()
       .eq('is_verified', true)
       .eq('active_role', 'donor');
@@ -407,7 +407,7 @@ final inProgressDonationsProvider =
 
     if (donorIds.isNotEmpty) {
       final profileRows = await client
-          .from('profiles')
+          .from('profiles_public')
           .select('id, name, blood_group, profile_photo_url')
           .inFilter('id', donorIds);
 
@@ -542,7 +542,7 @@ final urgentRequestsStreamProvider = StreamProvider<List<Map<String, dynamic>>>(
 
       if (requesterIds.isNotEmpty) {
         final profileRows = await client
-            .from('profiles')
+            .from('profiles_public')
             .select('id, name, profile_photo_url, is_verified')
             .inFilter('id', requesterIds);
 
@@ -630,9 +630,14 @@ final cooldownProvider = Provider<CooldownStatus>((ref) {
           if (profile.lastDonationDate == null) {
             return const CooldownStatus(eligible: true);
           }
-          final daysSince = DateTime.now()
-              .difference(profile.lastDonationDate!)
-              .inDays;
+          // UTC-only math to stay consistent with the Supabase admin panel.
+          final nowUtc = DateTime.now().toUtc();
+          final lastUtc = profile.lastDonationDate!.toUtc();
+          final daysSince = DateTime.utc(
+                nowUtc.year, nowUtc.month, nowUtc.day,
+              ).difference(
+                DateTime.utc(lastUtc.year, lastUtc.month, lastUtc.day),
+              ).inDays;
           final remaining = AppConstants.donationCooldownDays - daysSince;
           return CooldownStatus(
             eligible: remaining <= 0,

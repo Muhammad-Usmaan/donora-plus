@@ -17,6 +17,7 @@ import '../../../core/widgets/stat_tile.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../chat/providers/chat_providers.dart';
 import '../providers/donor_detail_provider.dart';
+import '../widgets/report_donor_sheet.dart';
 
 // ── Layout metrics ────────────────────────────────────────────────────────────
 
@@ -666,36 +667,7 @@ class _ListSection extends StatelessWidget {
   }
 
   void _showReportDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Report this profile?'),
-        content: const Text(
-          'Let our moderation team know if something looks wrong — '
-          'false information or unsafe behavior.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: context.colors.urgent,
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              // TODO(backend): persist profile reports once a moderation
-              // table exists — for now this only acknowledges the report.
-              context.showSnackBar(
-                'Thanks — our team will review this profile.',
-              );
-            },
-            child: const Text('Report'),
-          ),
-        ],
-      ),
-    );
+    showReportDonorSheet(context, donorId: donor.id, donorName: donor.name);
   }
 }
 

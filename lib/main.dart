@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,6 +10,7 @@ import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'features/notifications/providers/notification_settings_provider.dart';
 import 'firebase_options.dart';
+import 'services/deep_link_handler.dart';
 import 'services/notifications/fcm_bootstrap.dart';
 
 void main() async {
@@ -17,13 +19,9 @@ void main() async {
   // ── Diagnostic: log env config presence (masked) before any init. ──
   // In release, view with:  flutter logs  /  adb logcat | grep donora
   // These prints are stripped by tree-shaking in --obfuscate builds.
-  final urlLen = EnvConfig.supabaseUrl.length;
   final keyLen = EnvConfig.supabaseAnonKey.length;
-  final keyPreview = keyLen > 8
-      ? '${EnvConfig.supabaseAnonKey.substring(0, 8)}…(${keyLen} chars)'
-      : '(empty)';
-  debugPrint('[donora] SUPABASE_URL length=$urlLen');
-  debugPrint('[donora] SUPABASE_ANON_KEY=$keyPreview');
+  debugPrint('Supabase anon key: ${keyLen > 0 ? "${keyLen} chars" : "(empty)"}');
+ 
 
   try {
     // Firebase Core is only needed for FCM push notifications.
@@ -54,6 +52,9 @@ void main() async {
     await Supabase.initialize(
       url: EnvConfig.supabaseUrl,
       publishableKey: EnvConfig.supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
     );
 
     // Local preferences (notification settings, etc.).
@@ -72,7 +73,7 @@ void main() async {
     // instead of letting the process die silently (release mode has
     // no red error overlay).  The app stays alive so the user sees
     // *something* and the developer sees the message in logs.
-    debugPrint('[donora] Fatal startup error: $error');
+   
     debugPrint('$stack');
 
     runApp(_StartupErrorApp(error: error, stack: stack));
@@ -90,6 +91,9 @@ class DonoraPlusApp extends ConsumerWidget {
     // FCM lifecycle: permission, token sync, foreground banners, deep links.
     // Watching here keeps the listeners alive for the entire session.
     ref.watch(fcmBootstrapProvider);
+
+    // OS-level deep links (password-reset callback, etc.).
+    DeepLinkHandler.start();
 
     return MaterialApp.router(
       title: 'Donora+',
@@ -129,7 +133,10 @@ class _StartupErrorScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Mask the anon key in the displayed message if it partially loaded.
-    final message = error.toString();
+    // In release builds, show a generic message to avoid leaking internals.
+    final message = kReleaseMode
+        ? 'An unexpected error occurred during startup.\n\n${error.toString()}'
+        : error.toString();
 
     return Scaffold(
       backgroundColor: const Color(0xFFB71C1C),
@@ -153,7 +160,9 @@ class _StartupErrorScreen extends StatelessWidget {
               Expanded(
                 child: SingleChildScrollView(
                   child: SelectableText(
-                    '$message\n\nStack trace:\n$stack',
+                    kReleaseMode
+                        ? message
+                        : '$message\n\nStack trace:\n$stack',
                     style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 12,

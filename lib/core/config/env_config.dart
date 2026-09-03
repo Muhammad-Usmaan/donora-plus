@@ -36,6 +36,31 @@ class EnvConfig {
     defaultValue: '',
   );
 
+  /// Custom URL scheme used for deep links (password reset, etc.).
+  ///
+  /// Must match the scheme registered in:
+  ///   • `AndroidManifest.xml` — `<intent-filter>` `<data android:scheme="...">`
+  ///   • `Info.plist` — `CFBundleURLSchemes`
+  ///   • Supabase dashboard — Authentication > URL Configuration > Redirect URLs
+  static const String appUrlScheme = String.fromEnvironment(
+    'https://donoraplus.vercel.app',
+    defaultValue: 'donora-plus',
+  );
+
+  /// Base URL of the web frontend — used to build auth redirect URLs.
+  /// Must exactly match the Site URL configured in the Supabase dashboard.
+  static const String webBaseUrl = 'https://donoraplus.vercel.app';
+
+  /// Redirect URL for email confirmation after signup.
+  /// Must exactly match an entry in Supabase dashboard > Redirect URLs.
+  static const String emailConfirmRedirectUrl =
+      '$webBaseUrl/account-confirmed';
+
+  /// Redirect URL for password-reset emails.
+  /// Must exactly match an entry in Supabase dashboard > Redirect URLs.
+  static const String passwordResetRedirectUrl =
+      '$webBaseUrl/reset-password';
+
   /// Whether all required environment variables are present
   static bool get isConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;

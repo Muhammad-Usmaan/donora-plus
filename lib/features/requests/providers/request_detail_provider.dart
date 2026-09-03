@@ -173,15 +173,29 @@ final requestDetailProvider = FutureProvider.family<RequestDetail, String>((
   requestId,
 ) async {
   final client = ref.watch(supabaseClientProvider);
+
+  // Step 1: Fetch the blood request.
   final data = await client
       .from('blood_requests')
-      .select(
-        '*, requester:profiles!requester_id(id, name, phone, profile_photo_url, is_verified)',
-      )
+      .select('*')
       .eq('id', requestId)
       .maybeSingle();
 
   if (data == null) throw Exception('Request not found');
+
+  // Step 2: Fetch requester's public profile separately.
+  final requesterId = data['requester_id'] as String?;
+  if (requesterId != null) {
+    final requesterProfile = await client
+        .from('profiles_public')
+        .select('id, name, profile_photo_url, is_verified')
+        .eq('id', requesterId)
+        .maybeSingle();
+    if (requesterProfile != null) {
+      data['requester'] = requesterProfile;
+    }
+  }
+
   return RequestDetail.fromMap(data);
 });
 
@@ -362,7 +376,8 @@ class ConfirmDonationAction {
 
 /// Fetches donors who responded to a given blood request.
 ///
-/// Queries `request_responses` joined with `profiles`.
+/// Queries `request_responses` then fetches donor profiles from
+/// `profiles_public` in a separate step.
 /// Returns an empty list if the table doesn't exist yet (graceful fallback).
 final requestResponsesProvider =
     FutureProvider.family<List<RequestResponder>, String>((
@@ -372,15 +387,45 @@ final requestResponsesProvider =
       final client = ref.watch(supabaseClientProvider);
 
       try {
+        // Step 1: Fetch responses (without profile join).
         final data = await client
             .from('request_responses')
-            .select('*, profiles!donor_id(*)')
+            .select('*')
             .eq('request_id', requestId)
             .order('responded_at', ascending: false);
 
-        return (data as List)
-            .map((row) => RequestResponder.fromMap(row as Map<String, dynamic>))
+        final responses = (data as List).cast<Map<String, dynamic>>();
+        if (responses.isEmpty) return <RequestResponder>[];
+
+        // Step 2: Fetch donor public profiles separately.
+        final donorIds = responses
+            .map((r) => r['donor_id'] as String?)
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toSet()
             .toList();
+
+        Map<String, Map<String, dynamic>> profileMap = {};
+        if (donorIds.isNotEmpty) {
+          final profiles = await client
+              .from('profiles_public')
+              .select('id, name, blood_group, city, is_verified, is_top_donor, '
+                  'donor_classification, profile_photo_url')
+              .inFilter('id', donorIds);
+          profileMap = {
+            for (final p in (profiles as List).cast<Map<String, dynamic>>())
+              p['id'] as String: p,
+          };
+        }
+
+        // Step 3: Merge donor profiles into response rows.
+        return responses.map((row) {
+          final donorId = row['donor_id'] as String?;
+          if (donorId != null && profileMap.containsKey(donorId)) {
+            row['profiles'] = profileMap[donorId];
+          }
+          return RequestResponder.fromMap(row);
+        }).toList();
       } on PostgrestException catch (e) {
         // If the table doesn't exist yet, return empty rather than crashing.
         if (e.code == '42P01' || e.message.contains('does not exist')) {

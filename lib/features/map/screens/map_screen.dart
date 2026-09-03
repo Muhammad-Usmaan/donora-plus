@@ -1,20 +1,41 @@
+import 'dart:math' show sin, cos, sqrt, atan2;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/map_utils.dart';
+import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
+import '../../../core/widgets/donor_status_chip.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../../services/providers.dart';
+import '../../home/providers/home_providers.dart';
 import '../../profile/providers/profile_providers.dart';
 import '../providers/map_providers.dart';
+
+// ── Haversine distance (local copy for list distance display) ────────────────
+
+double _distanceKm(LatLng a, LatLng b) {
+  const R = 6371.0;
+  final dLat = (b.latitude - a.latitude) * pi / 180;
+  final dLng = (b.longitude - a.longitude) * pi / 180;
+  final sinDLat = sin(dLat / 2);
+  final sinDLng = sin(dLng / 2);
+  final h = sinDLat * sinDLat +
+      cos(a.latitude * pi / 180) *
+          cos(b.latitude * pi / 180) *
+          sinDLng * sinDLng;
+  return R * 2 * atan2(sqrt(h), sqrt(1 - h));
+}
 
 /// Full-screen map scoped to the user's current city using flutter_map +
 /// OpenStreetMap tiles (no Google Maps or API-billed providers).
@@ -32,6 +53,14 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   final _mapController = MapController();
   bool _mapReady = false;
+  String? _selectedDonorId;
+  final ScrollController _sheetScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _sheetScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,9 +127,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final donors = donorsAsync.valueOrNull ?? [];
     final requests = requestsAsync.valueOrNull ?? [];
 
-    // Use GPS position for the current location dot (only if real GPS in Pakistan is available).
-    final gpsAsync = ref.watch(currentPositionProvider);
+    // Use real-time GPS stream for the current location dot.
+    final gpsAsync = ref.watch(positionStreamProvider);
     final currentLocation = gpsAsync.valueOrNull;
+
+    // Auto-recenter map when GPS position updates.
+    ref.listen<AsyncValue<LatLng?>>(positionStreamProvider, (_, next) {
+      next.whenData((pos) {
+        if (pos != null && _mapReady) {
+          _mapController.move(pos, _mapController.camera.zoom);
+        }
+      });
+    });
 
     // Build donor markers.
     final donorMarkers = donors.map((d) => _buildDonorMarker(d, colors)).toList();
@@ -172,7 +210,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final name = donor['name'] as String? ?? 'D';
     final bloodGroup = donor['blood_group'] as String? ?? '';
     final isVerified = donor['is_verified'] as bool? ?? false;
-    final borderColor = isVerified ? colors.success : colors.border;
+    final isSelected = donor['id'] == _selectedDonorId;
+    final borderColor =
+        isSelected ? colors.primary : (isVerified ? colors.success : colors.border);
+    final borderWidth = isSelected ? 3.5 : 2.5;
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'D';
 
     return Marker(
@@ -180,26 +221,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         (donor['lat'] as num).toDouble(),
         (donor['lng'] as num).toDouble(),
       ),
-      width: 56,
-      height: 56,
+      width: isSelected ? 64 : 56,
+      height: isSelected ? 64 : 56,
       alignment: Alignment.center,
       child: GestureDetector(
         onTap: () => _showDonorSheet(donor),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // Main circle
+            // Main circle (with selection glow)
             Container(
-              width: 40,
-              height: 40,
+              width: isSelected ? 48 : 40,
+              height: isSelected ? 48 : 40,
               decoration: BoxDecoration(
                 color: colors.card,
                 shape: BoxShape.circle,
-                border: Border.all(color: borderColor, width: 2.5),
+                border: Border.all(color: borderColor, width: borderWidth),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 4,
+                    color: isSelected
+                        ? colors.primary.withValues(alpha: 0.25)
+                        : Colors.black.withValues(alpha: 0.12),
+                    blurRadius: isSelected ? 8 : 4,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -295,7 +338,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _FilterSheet(),
+      builder: (_) => _FilterSheet(
+        selectedDonorId: _selectedDonorId,
+        onDonorTap: _focusOnDonor,
+      ),
     );
   }
 
@@ -328,8 +374,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       // Move camera
       _mapController.move(LatLng(lat, lng), AppConstants.defaultZoom);
       
-      // Invalidate current position provider so the blue dot updates
+      // Invalidate providers so the blue dot and map center refresh
       ref.invalidate(currentPositionProvider);
+      ref.invalidate(positionStreamProvider);
     } else {
       // Fall back to city-based center if GPS fails
       final centerAsync = ref.read(mapCenterProvider);
@@ -337,6 +384,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         _mapController.move(center, AppConstants.defaultZoom);
       });
     }
+  }
+
+  void _focusOnDonor(Map<String, dynamic> donor) {
+    final lat = (donor['lat'] as num?)?.toDouble();
+    final lng = (donor['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return;
+
+    _mapController.move(
+      LatLng(lat, lng),
+      15.0,
+    );
+    setState(() => _selectedDonorId = donor['id'] as String?);
+    Navigator.of(context).pop();
   }
 }
 
@@ -432,6 +492,8 @@ class _FilterBar extends ConsumerWidget {
     final filter = ref.watch(mapFilterProvider);
     final colors = context.colors;
     final activeCount = filter.selectedBloodTypes.length;
+    final hasFilters =
+        activeCount > 0 || filter.compatibleWithMe || filter.radiusKm != 100.0;
 
     return GestureDetector(
       onTap: onTap,
@@ -456,16 +518,21 @@ class _FilterBar extends ConsumerWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                activeCount > 0
-                    ? '$activeCount blood type${activeCount > 1 ? 's' : ''} · ${filter.radiusKm.round()} km'
-                    : 'Filter by blood type & distance',
+                !hasFilters
+                    ? 'Filter by blood type & distance'
+                    : [
+                        if (activeCount > 0)
+                          '$activeCount blood type${activeCount > 1 ? 's' : ''}',
+                        if (filter.compatibleWithMe) 'Compatible',
+                        '${filter.radiusKm.round()} km',
+                      ].join(' · '),
                 style: context.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w500,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (filter.isFilteringBlood)
+            if (hasFilters)
               GestureDetector(
                 onTap: () {
                   ref.read(mapFilterProvider.notifier).clearFilters();
@@ -482,125 +549,512 @@ class _FilterBar extends ConsumerWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Filter bottom sheet
+// Filter bottom sheet (with matching donors list)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _FilterSheet extends ConsumerWidget {
-  const _FilterSheet();
+  const _FilterSheet({
+    this.selectedDonorId,
+    this.onDonorTap,
+  });
+
+  final String? selectedDonorId;
+  final void Function(Map<String, dynamic> donor)? onDonorTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(mapFilterProvider);
+    final activeRole = ref.watch(activeRoleProvider);
+    final profileAsync = ref.watch(userProfileProvider);
+    final profile = profileAsync.valueOrNull;
     final colors = context.colors;
+    final donorsAsync = ref.watch(filteredMapDonorsProvider);
+    final centerAsync = ref.watch(mapCenterProvider);
+    final center = centerAsync.valueOrNull;
 
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        12,
-        20,
-        MediaQuery.of(context).padding.bottom + 20,
-      ),
-      decoration: BoxDecoration(
-        color: colors.card,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: colors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+    final showCompatToggle =
+        activeRole == 'seeker' && (profile?.bloodGroup.isNotEmpty ?? false);
 
-          Text('Filter Map', style: context.textTheme.titleLarge),
-          const SizedBox(height: 20),
+    final hasFilters = filter.isFilteringBlood ||
+        filter.radiusKm != 100.0 ||
+        filter.compatibleWithMe;
 
-          // Blood type chips
-          Text(
-            'Blood Type',
-            style: context.textTheme.titleMedium,
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: colors.card,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: AppConstants.bloodTypes.map((type) {
-              final isSelected = filter.selectedBloodTypes.contains(type);
-              return BloodTypeChip(
-                bloodType: type,
-                selected: isSelected,
-                onTap: () =>
-                    ref.read(mapFilterProvider.notifier).toggleBloodType(type),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 24),
-
-          // Distance radius slider
-          Text(
-            'Distance Radius',
-            style: context.textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: colors.primary,
-                    inactiveTrackColor: colors.border,
-                    thumbColor: colors.primary,
-                    overlayColor: colors.primary.withValues(alpha: 0.12),
-                    trackHeight: 4,
+          child: CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    12,
+                    20,
+                    hasFilters ? 8 : 20,
                   ),
-                  child: Slider(
-                    value: filter.radiusKm,
-                    min: 5,
-                    max: 100,
-                    divisions: 19,
-                    onChanged: (v) =>
-                        ref.read(mapFilterProvider.notifier).setRadius(v),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Handle bar
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: colors.border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        'Filter Map',
+                        style: context.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Blood type chips
+                      Text(
+                        'Blood Type',
+                        style: context.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AppConstants.bloodTypes.map((type) {
+                          final isSelected =
+                              filter.selectedBloodTypes.contains(type);
+                          return BloodTypeChip(
+                            bloodType: type,
+                            selected: isSelected,
+                            onTap: () => ref
+                                .read(mapFilterProvider.notifier)
+                                .toggleBloodType(type),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Compatible-with-me toggle
+                      if (showCompatToggle)
+                        _MapFilterToggleRow(
+                          icon: Icons.bloodtype,
+                          label: 'Compatible with me',
+                          selected: filter.compatibleWithMe,
+                          activeColor: colors.primary,
+                          inactiveColor: colors.primaryContainer,
+                          onTap: () => ref
+                              .read(mapFilterProvider.notifier)
+                              .setCompatibleWithMe(
+                                  !filter.compatibleWithMe),
+                        ),
+                      const SizedBox(height: 24),
+
+                      // Distance radius slider
+                      Text(
+                        'Distance Radius',
+                        style: context.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: colors.primary,
+                                inactiveTrackColor: colors.border,
+                                thumbColor: colors.primary,
+                                overlayColor: colors.primary
+                                    .withValues(alpha: 0.12),
+                                trackHeight: 4,
+                              ),
+                              child: Slider(
+                                value: filter.radiusKm,
+                                min: 5,
+                                max: 100,
+                                divisions: 19,
+                                onChanged: (v) => ref
+                                    .read(mapFilterProvider.notifier)
+                                    .setRadius(v),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 56,
+                            child: Text(
+                              '${filter.radiusKm.round()} km',
+                              style:
+                                  context.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Clear button
+                      if (hasFilters)
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: () => ref
+                                .read(mapFilterProvider.notifier)
+                                .clearFilters(),
+                            child: Text(
+                              'Clear all filters',
+                              style:
+                                  TextStyle(color: colors.primary),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 56,
-                child: Text(
-                  '${filter.radiusKm.round()} km',
-                  style: context.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+
+              // ── Matching Donors list (only when filters are active) ──
+              if (hasFilters) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          PhosphorIconsRegular.mapPin,
+                          size: 18,
+                          color: colors.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Matching Donors',
+                          style: context.textTheme.titleMedium,
+                        ),
+                        const Spacer(),
+                        donorsAsync.when(
+                          data: (donors) => Text(
+                            '${donors.length}',
+                            style: context.textTheme.bodySmall
+                                ?.copyWith(color: colors.textMedium),
+                          ),
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
                   ),
-                  textAlign: TextAlign.right,
                 ),
-              ),
+                donorsAsync.when(
+                  data: (donors) {
+                    if (donors.isEmpty) {
+                      return const SliverToBoxAdapter(
+                        child: _MapFilterEmptyState(),
+                      );
+                    }
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final donor = donors[index];
+                          final donorId =
+                              donor['id'] as String? ?? '';
+                          final dLat =
+                              (donor['lat'] as num?)?.toDouble();
+                          final dLng =
+                              (donor['lng'] as num?)?.toDouble();
+                          final distKm = (center != null &&
+                                  dLat != null &&
+                                  dLng != null)
+                              ? _distanceKm(
+                                  center,
+                                  LatLng(dLat, dLng),
+                                )
+                              : null;
+                          return _MapFilterDonorCard(
+                            donor: donor,
+                            distanceKm: distKm,
+                            isSelected:
+                                donorId == selectedDonorId,
+                            onTap: () =>
+                                onDonorTap?.call(donor),
+                          );
+                        },
+                        childCount: donors.length,
+                      ),
+                    );
+                  },
+                  loading: () => SliverToBoxAdapter(
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: colors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  error: (e, _) => SliverToBoxAdapter(
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          'Could not load donors',
+                          style: context.textTheme.bodySmall
+                              ?.copyWith(color: colors.textMedium),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height:
+                        MediaQuery.of(context).padding.bottom + 20,
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 16),
+        );
+      },
+    );
+  }
+}
 
-          // Clear button
-          if (filter.isFilteringBlood || filter.radiusKm != 25.0)
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () =>
-                    ref.read(mapFilterProvider.notifier).clearFilters(),
-                child: Text(
-                  'Clear all filters',
-                  style: TextStyle(color: colors.primary),
-                ),
+// ═══════════════════════════════════════════════════════════════════════════════
+// Matching donor card (inside filter bottom sheet)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _MapFilterDonorCard extends StatelessWidget {
+  const _MapFilterDonorCard({
+    required this.donor,
+    required this.distanceKm,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> donor;
+  final double? distanceKm;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  String get _initials {
+    final name = donor['name'] as String? ?? '';
+    final words = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(2);
+    if (words.isEmpty) return '?';
+    return words.map((w) => w[0].toUpperCase()).join();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final name = donor['name'] as String? ?? 'Donor';
+    final bloodGroup = donor['blood_group'] as String? ?? '';
+    final isVerified = donor['is_verified'] == true;
+    final photoUrl = donor['profile_photo_url'] as String?;
+    final hasPhoto = photoUrl != null && photoUrl.isNotEmpty;
+    final classification =
+        donor['donor_classification'] as String? ?? 'volunteer';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: AppCard(
+        borderColor: isSelected ? colors.primary : null,
+        onTap: onTap,
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            // Avatar
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: colors.primaryContainer,
+              backgroundImage:
+                  hasPhoto ? NetworkImage(photoUrl) : null,
+              child: hasPhoto
+                  ? null
+                  : Text(
+                      _initials,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: colors.primary,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 12),
+
+            // Name, distance, classification
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              context.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (isVerified) ...[
+                        const SizedBox(width: 6),
+                        const VerifiedBadge(compact: true),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        PhosphorIconsRegular.mapPin,
+                        size: 14,
+                        color: colors.textMedium,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        distanceKm != null
+                            ? '${distanceKm!.toStringAsFixed(1)} km away'
+                            : 'Distance unknown',
+                        style: context.textTheme.bodySmall?.copyWith(
+                          color: colors.textMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  DonorStatusChip(classification: classification),
+                ],
               ),
             ),
+            const SizedBox(width: 8),
+
+            // Blood type
+            if (bloodGroup.isNotEmpty)
+              BloodTypeChip(bloodType: bloodGroup, compact: true),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Empty state for matching donors list
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _MapFilterEmptyState extends StatelessWidget {
+  const _MapFilterEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            PhosphorIconsRegular.mapPin,
+            size: 36,
+            color: colors.textMedium,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No matching donors found',
+            style: context.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Try expanding your radius or changing filters.',
+            style: context.textTheme.bodySmall?.copyWith(
+              color: colors.textMedium,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Reusable filter toggle row (used in the map filter bottom sheet)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _MapFilterToggleRow extends StatelessWidget {
+  const _MapFilterToggleRow({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final Color activeColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? activeColor : inactiveColor,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? Colors.white : activeColor,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : activeColor,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

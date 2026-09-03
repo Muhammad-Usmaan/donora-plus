@@ -1,15 +1,13 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-admin@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-/**
- * Scheduled Edge Function: expire-stale-requests
- *
- * Called by a Supabase scheduled function (pg_cron or external cron)
- * every 15–30 minutes. Invokes the `expire_stale_requests()` database
- * function which marks active requests past their `expires_at` as 'expired'.
- *
- * Deploy:  supabase functions deploy expire-stale-requests
- * Schedule: supabase functions schedule expire-stale-requests --cron "*/15 * * * *"
- */
+// expire-stale-requests
+//
+// Called by a Supabase scheduled function (pg_cron or external cron)
+// every 15–30 minutes. Invokes the `expire_stale_requests()` database
+// function which marks active requests past their `expires_at` as 'expired'.
+//
+// Deploy:   supabase functions deploy expire-stale-requests
+// Schedule: supabase functions schedule expire-stale-requests --cron "*/15 * * * *"
 
 Deno.serve(async (req) => {
   // Only allow scheduled invocations (cron sends an Authorization header
@@ -30,7 +28,7 @@ Deno.serve(async (req) => {
     if (error) {
       console.error('Error expiring stale requests:', error)
       return new Response(
-        JSON.stringify({ success: false, error: error.message }),
+        JSON.stringify({ success: false, error: 'Internal server error' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -44,7 +42,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error('Unexpected error:', err)
     return new Response(
-      JSON.stringify({ success: false, error: String(err) }),
+      JSON.stringify({ success: false, error: 'Internal server error' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }

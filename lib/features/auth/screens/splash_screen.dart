@@ -54,7 +54,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         final suspended = await ref
             .read(authServiceProvider)
             .checkSuspended(user.id);
-        if (suspended) {
+        if (suspended == true) {
           await ref.read(authServiceProvider).signOut();
           if (!mounted) return;
           context.go(RoutePaths.auth);

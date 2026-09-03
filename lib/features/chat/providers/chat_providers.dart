@@ -118,14 +118,10 @@ final conversationOtherParticipantProvider =
 
   final client = ref.watch(supabaseClientProvider);
   try {
+    // Step 1: Fetch conversation participant IDs.
     final row = await client
         .from('conversations')
-        .select('''
-          participant_1_id,
-          participant_2_id,
-          p1:profiles!participant_1_id(id, name, profile_photo_url, is_verified, phone),
-          p2:profiles!participant_2_id(id, name, profile_photo_url, is_verified, phone)
-        ''')
+        .select('participant_1_id, participant_2_id')
         .eq('id', conversationId)
         .maybeSingle();
 
@@ -133,15 +129,23 @@ final conversationOtherParticipantProvider =
 
     final p1Id = row['participant_1_id'] as String?;
     final isUserP1 = p1Id == user.id;
-    final otherProfile =
-        (isUserP1 ? row['p2'] : row['p1']) as Map<String, dynamic>? ?? {};
+    final otherId =
+        (isUserP1 ? row['participant_2_id'] : p1Id) as String? ?? '';
+
+    if (otherId.isEmpty) return null;
+
+    // Step 2: Fetch the other participant's public profile.
+    final profile = await client
+        .from('profiles_public')
+        .select('id, name, profile_photo_url, is_verified')
+        .eq('id', otherId)
+        .maybeSingle();
 
     return OtherParticipantInfo(
-      id: (isUserP1 ? row['participant_2_id'] : p1Id) as String? ?? '',
-      name: otherProfile['name'] as String? ?? 'User',
-      photoUrl: otherProfile['profile_photo_url'] as String?,
-      isVerified: otherProfile['is_verified'] as bool? ?? false,
-      phone: otherProfile['phone'] as String?,
+      id: otherId,
+      name: profile?['name'] as String? ?? 'User',
+      photoUrl: profile?['profile_photo_url'] as String?,
+      isVerified: profile?['is_verified'] as bool? ?? false,
     );
   } catch (_) {
     return null;
@@ -190,24 +194,55 @@ final conversationsListProvider =
   final client = ref.watch(supabaseClientProvider);
 
   try {
+    // Step 1: Fetch conversations with messages (no profile join).
     final data = await client
         .from('conversations')
         .select('''
           *,
-          p1:profiles!participant_1_id(id, name, profile_photo_url, is_verified),
-          p2:profiles!participant_2_id(id, name, profile_photo_url, is_verified),
           messages(id, content, sender_id, is_read, created_at)
         ''')
         .or('participant_1_id.eq.${user.id},participant_2_id.eq.${user.id}')
         .not('participant_2_id', 'is', null)
         .order('updated_at', ascending: false);
 
-    return (data as List)
-        .map((row) => ChatConversation.fromMap(
-              row as Map<String, dynamic>,
-              currentUserId: user.id,
-            ))
-        .toList();
+    final conversations = (data as List).cast<Map<String, dynamic>>();
+    if (conversations.isEmpty) return <ChatConversation>[];
+
+    // Step 2: Collect all other-participant IDs and fetch from profiles_public.
+    final otherIds = conversations.map((c) {
+      final p1Id = c['participant_1_id'] as String?;
+      return p1Id == user.id
+          ? c['participant_2_id'] as String?
+          : p1Id;
+    }).whereType<String>().where((id) => id.isNotEmpty).toSet().toList();
+
+    Map<String, Map<String, dynamic>> profileMap = {};
+    if (otherIds.isNotEmpty) {
+      final profiles = await client
+          .from('profiles_public')
+          .select('id, name, profile_photo_url, is_verified')
+          .inFilter('id', otherIds);
+      profileMap = {
+        for (final p in (profiles as List).cast<Map<String, dynamic>>())
+          p['id'] as String: p,
+      };
+    }
+
+    // Step 3: Merge profiles into conversation rows.
+    return conversations.map((row) {
+      final p1Id = row['participant_1_id'] as String?;
+      final isUserP1 = p1Id == user.id;
+      final otherId =
+          isUserP1 ? row['participant_2_id'] as String? : p1Id;
+      final otherProfile =
+          otherId != null ? profileMap[otherId] ?? {} : <String, dynamic>{};
+      // Inject the resolved profile so fromMap can pick it up.
+      row['other_profile'] = otherProfile;
+      return ChatConversation.fromMap(
+        row,
+        currentUserId: user.id,
+      );
+    }).toList();
   } on PostgrestException catch (e) {
     // Table doesn't exist yet — graceful fallback.
     if (e.code == '42P01' || e.message.contains('does not exist')) {

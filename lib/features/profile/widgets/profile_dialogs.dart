@@ -476,12 +476,30 @@ Future<void> showContactSupportDialog(BuildContext context) {
 class _ContactSupportDialog extends StatelessWidget {
   const _ContactSupportDialog();
 
-  static const _supportEmail = 'support@donora.app';
+  static const _supportEmail = 'donoraplus@gmail.com';
 
-  Future<void> _openMailApp() async {
-    final uri = Uri.parse('mailto:$_supportEmail?subject=Donora%2B%20Support');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+  Future<void> _openMailApp(BuildContext context) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _supportEmail,
+      query: 'subject=${Uri.encodeComponent('Donora+ Support')}',
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          context.showSnackBar(
+            'No mail app found. You can copy the email address above.',
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        context.showSnackBar(
+          'Could not open mail app: $e',
+        );
+      }
     }
   }
 
@@ -545,7 +563,7 @@ class _ContactSupportDialog extends StatelessWidget {
         ),
         DialogActionButton(
           label: 'Open Mail App',
-          onPressed: _openMailApp,
+          onPressed: () => _openMailApp(context),
         ),
       ],
     );

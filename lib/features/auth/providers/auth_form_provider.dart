@@ -38,12 +38,28 @@ class LoginNotifier extends StateNotifier<LoginState> {
             password,
           );
 
-      // Check if the user is suspended immediately after sign-in.
+      // After successful sign-in, verify the profile row exists.
+      // If it doesn't, this is an orphaned account (Auth user survived
+      // a previous "delete account" that only removed the profile row).
       final user = _ref.read(authServiceProvider).currentUser;
       if (user != null) {
+        final hasProfile = await _ref
+            .read(authServiceProvider)
+            .profileExists(user.id);
+        if (!hasProfile) {
+          await _ref.read(authServiceProvider).signOut();
+          state = state.copyWith(
+            isLoading: false,
+            serverError:
+                'This account no longer exists. Please sign up again if you\'d like to create a new account.',
+          );
+          return;
+        }
+
+        // Check if the user is suspended immediately after sign-in.
         final suspended =
             await _ref.read(authServiceProvider).checkSuspended(user.id);
-        if (suspended) {
+        if (suspended == true) {
           await _ref.read(authServiceProvider).signOut();
           state = state.copyWith(
             isLoading: false,
@@ -65,7 +81,7 @@ class LoginNotifier extends StateNotifier<LoginState> {
         try {
           final suspended =
               await _ref.read(authServiceProvider).checkSuspended(user.id);
-          if (suspended) {
+          if (suspended == true) {
             await _ref.read(authServiceProvider).signOut();
             state = state.copyWith(
               isLoading: false,
@@ -158,7 +174,23 @@ class SignupNotifier extends StateNotifier<SignupState> {
         normalisedPhone = phone.trim();
       }
 
-      // 1. Pre-check phone uniqueness via Supabase RPC to prevent registration collision.
+      // 1. Pre-check email uniqueness via Edge Function to prevent
+      //    the confusing "confirmation sent" when the email is already
+      //    registered (Supabase suppresses the duplicate-email error
+      //    from signUp() to prevent user enumeration).
+      final emailTaken = await _ref
+          .read(authServiceProvider)
+          .isEmailRegistered(email.trim());
+      if (emailTaken) {
+        state = state.copyWith(
+          isLoading: false,
+          serverError:
+              'This email is already registered. Please log in instead, or reset your password if you forgot it.',
+        );
+        return;
+      }
+
+      // 2. Pre-check phone uniqueness via Supabase RPC to prevent registration collision.
       final isTaken = await _ref
           .read(authServiceProvider)
           .isPhoneRegistered(normalisedPhone);
@@ -171,7 +203,7 @@ class SignupNotifier extends StateNotifier<SignupState> {
         return;
       }
 
-      // 2. Sign up with Supabase Auth
+      // 3. Sign up with Supabase Auth
       await _ref.read(authServiceProvider).signUpWithEmail(
             email.trim(),
             password,
@@ -189,7 +221,7 @@ class SignupNotifier extends StateNotifier<SignupState> {
             },
           );
 
-      // 3. Create or update profile row in Supabase
+      // 4. Create or update profile row in Supabase
       final user = _ref.read(authServiceProvider).currentUser;
       if (user != null) {
         try {

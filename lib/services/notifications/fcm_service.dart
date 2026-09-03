@@ -78,22 +78,34 @@ class FcmService {
   /// Saves the FCM token to the `device_tokens` table via the
   /// `upsert_device_token` RPC. Supports multiple devices per user —
   /// the same token re-upserted just refreshes `updated_at`.
+  ///
+  /// Retries up to 3 times with exponential backoff on transient network
+  /// errors (e.g. TLS handshake failures) so the device doesn't miss push
+  /// notifications until the next app launch.
   Future<void> saveToken() async {
     final token = await getToken();
     final userId = _supabase.auth.currentUser?.id;
     if (token == null || userId == null) return;
 
-    try {
-      await _supabase.rpc(
-        'upsert_device_token',
-        params: {
-          'p_token': token,
-          'p_platform': _currentPlatform,
-        },
-      );
-    } catch (e) {
-      // Non-critical — token will be re-synced on next launch.
-      debugPrint('FCM: failed to save token: $e');
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await _supabase.rpc(
+          'upsert_device_token',
+          params: {
+            'p_token': token,
+            'p_platform': _currentPlatform,
+          },
+        );
+        return; // success
+      } catch (e) {
+        if (attempt == maxAttempts) {
+          debugPrint('FCM: failed to save token after $maxAttempts attempts: $e');
+          return;
+        }
+        // Exponential backoff: 1s, 2s, 4s …
+        await Future<void>.delayed(Duration(seconds: 1 << (attempt - 1)));
+      }
     }
   }
 
