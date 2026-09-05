@@ -32,6 +32,7 @@ class RequestListItem {
     this.reason = RequestReason.other,
     this.reasonNote,
     this.plannedDate,
+    this.donationType = 'blood',
   });
 
   final String id;
@@ -54,6 +55,9 @@ class RequestListItem {
 
   /// When the donation is actually needed (non-urgent / pre-planned only).
   final DateTime? plannedDate;
+
+  /// Donation type — 'blood' or 'platelet'.
+  final String donationType;
 
   bool get isActive => status == 'active' && !isExpired;
 
@@ -95,6 +99,7 @@ class RequestListItem {
     plannedDate: map['planned_date'] != null
         ? DateTime.tryParse(map['planned_date'] as String)
         : null,
+    donationType: map['donation_type'] as String? ?? 'blood',
   );
 }
 
@@ -165,7 +170,7 @@ final requestsListProvider = FutureProvider<List<RequestListItem>>((ref) async {
   const columns =
       'id, requester_id, blood_group, units_needed, hospital_name, city, '
       'is_urgent, status, created_at, expires_at, notes, reason, '
-      'reason_note, planned_date';
+      'reason_note, planned_date, donation_type';
 
   // Filters first (filter builder), then the shared order/limit chain —
   // .order()/.limit() return a transform builder, so both are applied

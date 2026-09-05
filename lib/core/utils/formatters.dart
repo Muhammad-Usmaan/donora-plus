@@ -51,4 +51,24 @@ class Formatters {
   static String neededBy(DateTime plannedDate) {
     return 'Needed by ${dateShort(plannedDate)}';
   }
+
+  /// Relative future date: "in 12 days", "in 3 months", "in 2 years".
+  ///
+  /// Returns "Today" if the date is today, or falls back to [dateShort]
+  /// if the date is in the past.
+  static String relativeDate(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(dt.year, dt.month, dt.day);
+    final diff = target.difference(today).inDays;
+
+    if (diff <= 0) return 'Today';
+    if (diff < 30) return 'in $diff day${diff == 1 ? '' : 's'}';
+    if (diff < 365) {
+      final months = (diff / 30).round();
+      return 'in $months month${months == 1 ? '' : 's'}';
+    }
+    final years = (diff / 365).round();
+    return 'in $years year${years == 1 ? '' : 's'}';
+  }
 }

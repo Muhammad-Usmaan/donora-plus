@@ -25,11 +25,11 @@ class RequestFormState {
     this.hospitalName = '',
     this.unitsNeeded = 1,
     this.notes = '',
-    this.allowPhoneCall = false,
     this.isSubmitting = false,
     this.serverError,
     this.createdRequestId,
     this.plannedDate,
+    this.donationType = 'blood',
   });
 
   /// ID of the request being edited (null when creating a new request).
@@ -68,9 +68,6 @@ class RequestFormState {
   /// Optional additional notes.
   final String notes;
 
-  /// Contact preference: true = allow phone call, false = in-app chat only.
-  final bool allowPhoneCall;
-
   /// Whether the form is currently being submitted.
   final bool isSubmitting;
 
@@ -82,6 +79,9 @@ class RequestFormState {
 
   /// When the donation is actually needed (non-urgent / pre-planned only).
   final DateTime? plannedDate;
+
+  /// Donation type — 'blood' or 'platelet' (matches DB CHECK constraint).
+  final String donationType;
 
   /// Whether editing an existing request.
   bool get isEditing => editingRequestId != null;
@@ -118,13 +118,13 @@ class RequestFormState {
     String? hospitalName,
     int? unitsNeeded,
     String? notes,
-    bool? allowPhoneCall,
     bool? isSubmitting,
     String? serverError,
     bool clearError = false,
     String? createdRequestId,
     DateTime? plannedDate,
     bool clearPlannedDate = false,
+    String? donationType,
   }) {
     return RequestFormState(
       editingRequestId:
@@ -140,11 +140,11 @@ class RequestFormState {
       hospitalName: hospitalName ?? this.hospitalName,
       unitsNeeded: unitsNeeded ?? this.unitsNeeded,
       notes: notes ?? this.notes,
-      allowPhoneCall: allowPhoneCall ?? this.allowPhoneCall,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       serverError: clearError ? null : (serverError ?? this.serverError),
       createdRequestId: createdRequestId ?? this.createdRequestId,
       plannedDate: clearPlannedDate ? null : (plannedDate ?? this.plannedDate),
+      donationType: donationType ?? this.donationType,
     );
   }
 }
@@ -171,8 +171,8 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
       hospitalName: request.hospitalName,
       unitsNeeded: request.unitsNeeded,
       notes: request.notes ?? '',
-      allowPhoneCall: request.allowPhoneContact,
       plannedDate: request.plannedDate,
+      donationType: request.donationType,
     );
   }
 
@@ -237,8 +237,8 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
 
   void setNotes(String notes) => state = state.copyWith(notes: notes);
 
-  void setAllowPhoneCall(bool allow) =>
-      state = state.copyWith(allowPhoneCall: allow);
+  void setDonationType(String type) =>
+      state = state.copyWith(donationType: type);
 
   // ── Pre-fill city from profile ──────────────────────────────────────
 
@@ -284,10 +284,10 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
           'city': state.city!,
           'notes': state.notes.trim().isEmpty ? null : state.notes.trim(),
           'is_urgent': state.isUrgent,
-          'allow_phone_contact': state.allowPhoneCall,
           'planned_date': state.isUrgent
               ? null
               : state.plannedDate?.toUtc().toIso8601String(),
+          'donation_type': state.donationType,
         }).eq('id', reqId);
 
         state = state.copyWith(
@@ -319,7 +319,7 @@ class RequestCreateNotifier extends StateNotifier<RequestFormState> {
           'notes': state.notes.trim().isEmpty ? null : state.notes.trim(),
           'is_urgent': state.isUrgent,
           'status': 'active',
-          'allow_phone_contact': state.allowPhoneCall,
+          'donation_type': state.donationType,
           if (!state.isUrgent && state.plannedDate != null)
             'planned_date': state.plannedDate!.toUtc().toIso8601String(),
         }).select('id').single();

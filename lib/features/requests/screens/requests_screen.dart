@@ -7,6 +7,7 @@ import '../../../core/utils/extensions.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
+import '../../../core/widgets/donation_type_badge.dart';
 import '../../../core/widgets/reason_pill.dart';
 import '../../../core/widgets/urgent_request_badge.dart';
 import '../providers/requests_list_provider.dart';
@@ -373,9 +374,11 @@ class _RequestCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Blood group + units.
+          // Donation type badge + blood group + units.
           Row(
             children: [
+              DonationTypeBadge(donationType: request.donationType, compact: true),
+              const SizedBox(width: 6),
               if (request.bloodGroup.isNotEmpty)
                 BloodTypeChip(bloodType: request.bloodGroup),
               const SizedBox(width: 8),

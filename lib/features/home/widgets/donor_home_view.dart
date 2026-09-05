@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,13 +11,15 @@ import '../../../core/widgets/blood_type_chip.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/reason_pill.dart';
 import '../../../core/widgets/secondary_button.dart';
+import '../../../core/widgets/donation_type_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../../features/chatbot/widgets/ask_donora_ai_card.dart';
+import 'donation_type_tabs.dart';
 import '../../../features/chat/providers/chat_providers.dart';
 import '../../../features/requests/providers/request_detail_provider.dart';
 import '../providers/home_providers.dart';
 
-/// Donor home view — verification banner, urgent requests, cooldown status.
+/// Donor home view — verification banner, AI card, urgent requests feed.
 class DonorHomeView extends ConsumerWidget {
   const DonorHomeView({super.key});
 
@@ -40,24 +40,14 @@ class DonorHomeView extends ConsumerWidget {
               ) ??
               const SizedBox.shrink(),
 
-          // ── Donation Status ───────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Your Donation Status',
-              style: context.textTheme.titleLarge,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: _DonationStatusCard(),
-          ),
-          const SizedBox(height: 16),
-
           // ── Ask Donora AI ─────────────────────────────────────────
           const AskDonoraAiCard(),
           const SizedBox(height: 24),
+
+          // ── Blood / Platelets filter ────────────────────────────────
+          const DonationTypeTabs(),
+          const SizedBox(height: 16),
+
           // ── Urgent Requests Near You ──────────────────────────────
           _SectionHeader(
             title: 'All Blood Requests',
@@ -377,6 +367,7 @@ class _UrgentRequestCardState extends ConsumerState<_UrgentRequestCard> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final bloodGroup = widget.request['blood_group'] as String? ?? '';
+    final donationType = widget.request['donation_type'] as String? ?? 'blood';
     final city = widget.request['city'] as String? ?? '';
     final patientName = widget.request['patient_name'] as String? ?? '';
     final notes = widget.request['notes'] as String? ?? '';
@@ -485,7 +476,9 @@ class _UrgentRequestCardState extends ConsumerState<_UrgentRequestCard> {
                   ],
                 ),
               ),
-              // Blood type badge
+              // Donation type badge + blood type badge
+              DonationTypeBadge(donationType: donationType, compact: true),
+              const SizedBox(width: 6),
               if (bloodGroup.isNotEmpty) BloodTypeChip(bloodType: bloodGroup),
             ],
           ),
@@ -602,315 +595,6 @@ class _UrgentRequestCardState extends ConsumerState<_UrgentRequestCard> {
       ),
     );
   }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Donation status card
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _DonationStatusCard extends ConsumerWidget {
-  const _DonationStatusCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cooldown = ref.watch(cooldownProvider);
-    final colors = context.colors;
-
-    if (cooldown.eligible) {
-      return Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: colors.card,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: colors.success.withValues(alpha: 0.25),
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: colors.success.withValues(alpha: 0.05),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: colors.success.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(
-                        Icons.volunteer_activism_rounded,
-                        color: colors.success,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Eligible to Donate',
-                          style: context.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: colors.textHigh,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Available to save lives',
-                          style: context.textTheme.bodySmall?.copyWith(
-                            color: colors.success,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.success.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: colors.success.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: colors.success,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'ACTIVE',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: colors.success,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'You have no active cooldown. When urgent blood requests match your blood type, you will be notified immediately.',
-              style: context.textTheme.bodySmall?.copyWith(
-                color: colors.textMedium,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Inside cooldown — show progress ring.
-    final progress = 1.0 - (cooldown.daysRemaining / cooldown.cooldownDays);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: colors.border.withValues(alpha: 0.8),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _CooldownRing(
-                progress: progress,
-                daysRemaining: cooldown.daysRemaining,
-                totalDays: cooldown.cooldownDays,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Cooldown Active',
-                          style: context.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.warning.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            'RESTING',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: colors.warning,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${cooldown.daysRemaining} day${cooldown.daysRemaining == 1 ? '' : 's'} until next donation.',
-                      style: context.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: colors.textHigh,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Server-enforced ${cooldown.cooldownDays}-day cooldown for donor safety.',
-                      style: context.textTheme.bodySmall?.copyWith(
-                        color: colors.textMedium,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Cooldown progress ring
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _CooldownRing extends StatelessWidget {
-  const _CooldownRing({
-    required this.progress,
-    required this.daysRemaining,
-    required this.totalDays,
-  });
-
-  final double progress;
-  final int daysRemaining;
-  final int totalDays;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return SizedBox(
-      width: 72,
-      height: 72,
-      child: CustomPaint(
-        painter: _RingPainter(
-          progress: progress,
-          trackColor: colors.border,
-          progressColor: colors.primary,
-        ),
-        child: Center(
-          child: Text(
-            '$daysRemaining',
-            style: context.textTheme.titleLarge?.copyWith(
-              color: colors.primary,
-              fontSize: 22,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  const _RingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.progressColor,
-  });
-
-  final double progress;
-  final Color trackColor;
-  final Color progressColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 4;
-    const strokeWidth = 5.0;
-
-    // Track
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = trackColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth,
-    );
-
-    // Progress arc
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -pi / 2,
-      2 * pi * progress,
-      false,
-      Paint()
-        ..color = progressColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RingPainter oldDelegate) =>
-      oldDelegate.progress != progress;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

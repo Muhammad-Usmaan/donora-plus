@@ -28,6 +28,10 @@ import '../providers/auth_form_provider.dart';
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
+  /// Set to `true` after a successful password reset so the login screen
+  /// shows a success snackbar on the next build.
+  static bool showResetSuccess = false;
+
   @override
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
@@ -58,6 +62,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _signupPasswordCtrl.dispose();
     _signupConfirmCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Show a success snackbar if the user just completed a password reset.
+    if (AuthScreen.showResetSuccess) {
+      AuthScreen.showResetSuccess = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.showSnackBar('Password updated successfully! Please log in with your new password.');
+        }
+      });
+    }
   }
 
   @override

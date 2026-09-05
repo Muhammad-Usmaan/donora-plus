@@ -137,7 +137,7 @@ final conversationOtherParticipantProvider =
     // Step 2: Fetch the other participant's public profile.
     final profile = await client
         .from('profiles_public')
-        .select('id, name, profile_photo_url, is_verified')
+        .select('id, name, profile_photo_url, is_verified, phone')
         .eq('id', otherId)
         .maybeSingle();
 
@@ -146,6 +146,7 @@ final conversationOtherParticipantProvider =
       name: profile?['name'] as String? ?? 'User',
       photoUrl: profile?['profile_photo_url'] as String?,
       isVerified: profile?['is_verified'] as bool? ?? false,
+      phone: profile?['phone'] as String?,
     );
   } catch (_) {
     return null;
@@ -192,6 +193,27 @@ final conversationsListProvider =
   if (user == null) return [];
 
   final client = ref.watch(supabaseClientProvider);
+
+  // Realtime: re-fetch the conversation list whenever a new message
+  // arrives in any conversation. This keeps unread counts (both the
+  // per-tile pill and the profile-icon red dot) up to date without
+  // polling. The subscription is automatically cleaned up when the
+  // provider is disposed.
+  final channel = client
+      .channel('conversations_list_realtime')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'messages',
+        callback: (_) {
+          ref.invalidateSelf();
+        },
+      )
+      .subscribe();
+
+  ref.onDispose(() {
+    client.removeChannel(channel);
+  });
 
   try {
     // Step 1: Fetch conversations with messages (no profile join).
@@ -420,6 +442,19 @@ class GetOrCreateConversationAction {
   }
 }
 
+/// Total unread messages across all conversations.
+// Derived from conversationsListProvider so it stays in sync with
+// the per-conversation unread counts shown on the chat list tiles.
+// When conversationsListProvider is invalidated (mark-as-read, pull-to-
+// refresh), this provider automatically recomputes.
+final unreadMessageCountProvider = Provider<int>((ref) {
+  final conversations = ref.watch(conversationsListProvider);
+  return conversations.whenOrNull(
+        data: (list) => list.fold<int>(0, (sum, c) => sum + c.unreadCount),
+      ) ??
+      0;
+});
+
 /// Marks all messages in a conversation as read for the current user.
 final markMessagesReadProvider = Provider<MarkMessagesReadAction>((ref) {
   return MarkMessagesReadAction(ref);
@@ -439,8 +474,10 @@ class MarkMessagesReadAction {
           .from('messages')
           .update({'is_read': true})
           .eq('conversation_id', conversationId)
-          .eq('sender_id', 'neq.${user.id}')
+          .neq('sender_id', user.id)
           .eq('is_read', false);
+      // Refresh the conversations list so unread counts update.
+      _ref.invalidate(conversationsListProvider);
     } catch (_) {
       // Silently fail — marking read is non-critical.
     }

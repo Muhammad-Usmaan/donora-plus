@@ -9,6 +9,28 @@ import '../../../core/providers/auth_providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// ── Donation type filter ──────────────────────────────────────────────────────
+
+/// Donation type for the Blood / Platelets segmented tab on the home screen.
+///
+/// Values match the `blood_requests.donation_type` CHECK constraint
+/// (`'blood'` | `'platelet'`).
+enum DonationType {
+  blood('blood'),
+  platelet('platelet');
+
+  const DonationType(this.value);
+
+  /// DB column value for `blood_requests.donation_type`.
+  final String value;
+}
+
+/// Selected donation type for the home screen feed filter.
+/// Defaults to [DonationType.blood].
+final donationTypeFilterProvider = StateProvider<DonationType>(
+  (ref) => DonationType.blood,
+);
+
 // ── Profile model ─────────────────────────────────────────────────────────────
 
 /// Lightweight representation of the user's profile row in Supabase.
@@ -27,11 +49,14 @@ class UserProfile {
     this.email,
     this.dateOfBirth,
     this.lastDonationDate,
+    this.lastPlateletDonationDate,
     this.profilePhotoUrl,
     this.totalDonations = 0,
+    this.donationGoal,
     this.hemoglobinLevel,
     this.latitude,
     this.longitude,
+    this.createdAt,
   });
 
   final String id;
@@ -47,11 +72,14 @@ class UserProfile {
   final String? email;
   final DateTime? dateOfBirth;
   final DateTime? lastDonationDate;
+  final DateTime? lastPlateletDonationDate;
   final String? profilePhotoUrl;
   final int totalDonations;
+  final int? donationGoal;
   final double? hemoglobinLevel;
   final double? latitude;
   final double? longitude;
+  final DateTime? createdAt;
 
   factory UserProfile.fromMap(Map<String, dynamic> map) => UserProfile(
     id: map['id'] as String? ?? '',
@@ -71,8 +99,12 @@ class UserProfile {
     lastDonationDate: map['last_donation_date'] != null
         ? DateTime.tryParse(map['last_donation_date'] as String)?.toUtc()
         : null,
+    lastPlateletDonationDate: map['last_platelet_donation_date'] != null
+        ? DateTime.tryParse(map['last_platelet_donation_date'] as String)?.toUtc()
+        : null,
     profilePhotoUrl: map['profile_photo_url'] as String?,
     totalDonations: map['total_donations'] as int? ?? 0,
+    donationGoal: map['donation_goal'] as int?,
     hemoglobinLevel: map['hemoglobin_level'] != null
         ? (map['hemoglobin_level'] as num).toDouble()
         : null,
@@ -82,7 +114,20 @@ class UserProfile {
     longitude: map['longitude'] != null
         ? (map['longitude'] as num).toDouble()
         : null,
+    createdAt: map['created_at'] != null
+        ? DateTime.tryParse(map['created_at'] as String)
+        : null,
   );
+
+  // Most recent donation date across both types.
+  DateTime? get mostRecentDonationDate {
+    if (lastDonationDate == null && lastPlateletDonationDate == null) return null;
+    if (lastDonationDate == null) return lastPlateletDonationDate;
+    if (lastPlateletDonationDate == null) return lastDonationDate;
+    return lastDonationDate!.isAfter(lastPlateletDonationDate!)
+        ? lastDonationDate
+        : lastPlateletDonationDate;
+  }
 }
 
 // ── Phone normalisation ───────────────────────────────────────────────────
@@ -356,11 +401,14 @@ final activeRequestsProvider = StreamProvider<List<Map<String, dynamic>>>((
   if (user == null) return Stream.value([]);
 
   final client = ref.watch(supabaseClientProvider);
+  final donationType = ref.watch(donationTypeFilterProvider);
+
   return client
       .from('blood_requests')
       .stream(primaryKey: ['id'])
       .eq('requester_id', user.id)
       .eq('status', 'active')
+      .eq('donation_type', donationType.value)
       .order('created_at', ascending: false)
       .map((requests) {
     final now = DateTime.now().toUtc();
@@ -516,6 +564,8 @@ final urgentRequestsStreamProvider = StreamProvider<List<Map<String, dynamic>>>(
     final donorLat = profileAsync.valueOrNull?.latitude;
     final donorLng = profileAsync.valueOrNull?.longitude;
 
+    final donationType = ref.watch(donationTypeFilterProvider);
+
     // ── Fetch helper ────────────────────────────────────────────────────────
     Future<List<Map<String, dynamic>>> fetchRequests() async {
       // 1. Fetch active blood requests (no join — avoids multi-FK ambiguity).
@@ -523,6 +573,7 @@ final urgentRequestsStreamProvider = StreamProvider<List<Map<String, dynamic>>>(
           .from('blood_requests')
           .select('*')
           .eq('status', 'active')
+          .eq('donation_type', donationType.value)
           .gt('expires_at', DateTime.now().toUtc().toIso8601String())
           .order('created_at', ascending: false)
           .limit(50);

@@ -10,10 +10,12 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/map_utils.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
+import '../../../core/widgets/donation_type_badge.dart';
 import '../../../core/widgets/reason_pill.dart';
 import '../../../core/widgets/urgent_request_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../chatbot/widgets/ask_donora_ai_card.dart';
+import 'donation_type_tabs.dart';
 import '../providers/home_providers.dart';
 
 /// Seeker home view — urgent CTA, nearby verified donors, active requests.
@@ -103,6 +105,10 @@ class SeekerHomeView extends ConsumerWidget {
           // ── Ask Donora AI ──────────────────────────────────────
           const AskDonoraAiCard(),
           const SizedBox(height: 24),
+
+          // ── Blood / Platelets filter ────────────────────────────────
+          const DonationTypeTabs(),
+          const SizedBox(height: 16),
 
           // ── Donation in Progress (seeker only, hidden when empty) ─
           const _DonationInProgressSection(),
@@ -620,6 +626,7 @@ class _ActiveRequestCard extends ConsumerWidget {
     final colors = context.colors;
     final requestId = request['id'] as String? ?? '';
     final bloodGroup = request['blood_group'] as String? ?? '';
+    final donationType = request['donation_type'] as String? ?? 'blood';
     final city = request['city'] as String? ?? '';
     final hospitalName = request['hospital_name'] as String? ?? '';
     final patientName = request['patient_name'] as String? ?? '';
@@ -659,9 +666,11 @@ class _ActiveRequestCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Blood type + units + urgency / expiry label.
+            // Donation type badge + blood type + units + urgency / expiry label.
             Row(
               children: [
+                DonationTypeBadge(donationType: donationType, compact: true),
+                const SizedBox(width: 6),
                 if (bloodGroup.isNotEmpty) BloodTypeChip(bloodType: bloodGroup),
                 const SizedBox(width: 8),
                 Text(

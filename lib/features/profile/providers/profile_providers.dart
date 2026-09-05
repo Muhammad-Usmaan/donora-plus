@@ -286,7 +286,7 @@ final myRequestsListProvider = FutureProvider<List<RequestListItem>>((ref) async
   const columns =
       'id, requester_id, blood_group, units_needed, hospital_name, city, '
       'is_urgent, status, created_at, expires_at, notes, reason, '
-      'reason_note, planned_date';
+      'reason_note, planned_date, donation_type';
 
   final data = await client
       .from('blood_requests')
@@ -298,4 +298,50 @@ final myRequestsListProvider = FutureProvider<List<RequestListItem>>((ref) async
   return (data as List)
       .map((row) => RequestListItem.fromMap(row as Map<String, dynamic>))
       .toList();
+});
+
+// ── Donor feedback stats (appreciation fraction + star rating) ───────────────
+
+/// Feedback stats for the current donor, fetched via RPC.
+/// Returns {appreciated_count, total_feedback_count, average_star_rating}.
+/// average_star_rating is null when no feedback has been received.
+/// Returns null if the user is not signed in.
+final feedbackStatsProvider =
+    FutureProvider<Map<String, dynamic>?>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+
+  final client = ref.watch(supabaseClientProvider);
+  final result = await client.rpc(
+    'get_donor_feedback_stats',
+    params: {'p_donor_id': user.id},
+  );
+
+  if (result == null) {
+    return {'appreciated_count': 0, 'total_feedback_count': 0, 'average_star_rating': null};
+  }
+  final map = result as Map<String, dynamic>;
+  return {
+    'appreciated_count': (map['appreciated_count'] as int?) ?? 0,
+    'total_feedback_count': (map['total_feedback_count'] as int?) ?? 0,
+    'average_star_rating': (map['average_star_rating'] as num?)?.toDouble(),
+  };
+});
+
+// ── Next donation eligible date ─────────────────────────────────────────────
+
+/// Next date the current donor is eligible to donate (either type).
+/// Returns null if the donor has never donated.
+final nextDonationEligibleDateProvider = FutureProvider<DateTime?>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+
+  final client = ref.watch(supabaseClientProvider);
+  final result = await client.rpc(
+    'get_next_donation_eligible_date',
+    params: {'p_donor_id': user.id},
+  );
+
+  if (result == null) return null;
+  return DateTime.tryParse(result as String);
 });

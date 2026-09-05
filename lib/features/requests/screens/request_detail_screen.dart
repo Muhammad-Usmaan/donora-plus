@@ -10,6 +10,7 @@ import '../../../core/utils/map_utils.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/blood_type_chip.dart';
+import '../../../core/widgets/donation_type_badge.dart';
 import '../../../core/widgets/donor_status_chip.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/reason_pill.dart';
@@ -18,6 +19,7 @@ import '../../../core/widgets/urgent_request_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../chat/providers/chat_providers.dart';
 import '../providers/request_detail_provider.dart';
+import '../widgets/donation_feedback_sheet.dart';
 
 /// Detail view for a single blood request, including donor responses.
 ///
@@ -200,8 +202,14 @@ class _RequestSummaryCard extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
-          // ── Blood type (large chip) ──────────────────────────────
-          BloodTypeChip(bloodType: request.bloodGroup, selected: true),
+          // ── Donation type badge + blood type (large chip) ────────
+          Row(
+            children: [
+              DonationTypeBadge(donationType: request.donationType),
+              const SizedBox(width: 8),
+              BloodTypeChip(bloodType: request.bloodGroup, selected: true),
+            ],
+          ),
 
           const SizedBox(height: 12),
 
@@ -351,15 +359,6 @@ class _RequestSummaryCard extends ConsumerWidget {
               value: request.notes!,
             ),
           ],
-
-          const SizedBox(height: 10),
-          _DetailRow(
-            icon: request.allowPhoneContact ? Icons.phone : Icons.chat_bubble,
-            label: 'Contact',
-            value: request.allowPhoneContact
-                ? 'Phone call allowed'
-                : 'In-app chat only',
-          ),
 
           // ── Expires info ─────────────────────────────────────────
           if (request.isActive) ...[
@@ -554,6 +553,12 @@ class _DonationConfirmationCardState
             (confirmed ? 'Donation confirmed!' : 'Match cancelled.'),
         isError: !result.success,
       );
+    }
+
+    // After a successful confirmation, prompt the seeker for feedback.
+    // The sheet is optional — dismissing it without submitting is fine.
+    if (result.success && confirmed && mounted) {
+      await showDonationFeedbackSheet(context, requestId: widget.requestId);
     }
   }
 

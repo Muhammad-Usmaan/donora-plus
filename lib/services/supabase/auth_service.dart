@@ -108,10 +108,23 @@ class SupabaseAuthService {
     );
   }
 
+  /// Verifies a recovery OTP for password reset.
+  ///
+  /// On success, Supabase creates a temporary session that allows
+  /// calling [updatePassword] to set the new password.
+  Future<AuthResponse> verifyRecoveryOtp(String email, String token) async {
+    return _client.auth.verifyOTP(
+      email: email.trim(),
+      token: token.trim(),
+      type: OtpType.recovery,
+    );
+  }
+
   /// Updates the current user's password.
   ///
   /// Works both for authenticated users changing their password and for
-  /// users in a recovery session (after clicking a password-reset link).
+  /// users in a recovery session (after clicking a password-reset link
+  /// or verifying a recovery OTP).
   /// Throws [AuthException] on failure (e.g. weak password, expired session).
   Future<void> updatePassword(String newPassword) async {
     await _client.auth.updateUser(

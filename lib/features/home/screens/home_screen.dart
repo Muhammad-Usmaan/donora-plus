@@ -103,10 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               style: context.textTheme.titleLarge
                   ?.copyWith(color: context.colors.primary),
             ),
-        actions: [
-          _NotificationBell(),
-          const SizedBox(width: 12),
-        ],
+        actions: const [],
       ),
       body: activeRole == 'seeker'
           ? const SeekerHomeView()
@@ -145,37 +142,6 @@ class _Greeting extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Notification bell
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _NotificationBell extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined),
-          onPressed: () => context.pushNamed(RouteNames.notifications),
-        ),
-        // Red dot — always shown for MVP; replace with unread-count
-        // provider when the notifications feature is built.
-        Positioned(
-          right: 10,
-          top: 10,
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: context.colors.urgent,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
+// Notification bell removed — notifications accessible from Profile screen.
 
 // (Role switch moved to Profile & Settings screen)

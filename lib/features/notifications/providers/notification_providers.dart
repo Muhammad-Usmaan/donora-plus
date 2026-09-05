@@ -89,6 +89,25 @@ final notificationsProvider =
 
   final client = ref.watch(supabaseClientProvider);
 
+  // Realtime: re-fetch notifications whenever a new one is inserted
+  // (server-side inserts via Edge Functions). Keeps the notification
+  // red dot and list up to date without polling.
+  final channel = client
+      .channel('notifications_realtime')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'notifications',
+        callback: (_) {
+          ref.invalidateSelf();
+        },
+      )
+      .subscribe();
+
+  ref.onDispose(() {
+    client.removeChannel(channel);
+  });
+
   try {
     final data = await client
         .from('notifications')
@@ -108,6 +127,17 @@ final notificationsProvider =
     }
     rethrow;
   }
+});
+
+/// Total unread notifications for the current user.
+// Derived from notificationsProvider so it stays in sync automatically
+// when the list is refreshed or invalidated.
+final unreadNotificationCountProvider = Provider<int>((ref) {
+  final notifications = ref.watch(notificationsProvider);
+  return notifications.whenOrNull(
+        data: (list) => list.where((n) => !n.isRead).length,
+      ) ??
+      0;
 });
 
 /// Marks a single notification as read.

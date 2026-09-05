@@ -30,12 +30,12 @@ class RequestDetail {
     required this.expiresAt,
     this.fulfilledByDonorId,
     this.notes,
-    this.allowPhoneContact = false,
     this.reason = RequestReason.other,
     this.reasonNote,
     this.latitude,
     this.longitude,
     this.plannedDate,
+    this.donationType = 'blood',
   });
 
   final String id;
@@ -55,7 +55,6 @@ class RequestDetail {
   final DateTime createdAt;
   final DateTime expiresAt;
   final String? notes;
-  final bool allowPhoneContact;
   final double? latitude;
   final double? longitude;
 
@@ -67,6 +66,9 @@ class RequestDetail {
 
   /// When the donation is actually needed (non-urgent / pre-planned only).
   final DateTime? plannedDate;
+
+  /// Donation type — 'blood' or 'platelet'.
+  final String donationType;
 
   bool get isActive => status == 'active' && !isExpired;
   bool get isExpired => DateTime.now().isAfter(expiresAt);
@@ -101,7 +103,6 @@ class RequestDetail {
           DateTime.tryParse(map['expires_at'] as String? ?? '') ??
           DateTime.now().add(const Duration(hours: 72)),
       notes: map['notes'] as String?,
-      allowPhoneContact: map['allow_phone_contact'] as bool? ?? false,
       reason: RequestReason.fromValue(map['reason'] as String?),
       reasonNote: map['reason_note'] as String?,
       latitude: map['latitude'] != null
@@ -113,6 +114,7 @@ class RequestDetail {
       plannedDate: map['planned_date'] != null
           ? DateTime.tryParse(map['planned_date'] as String)
           : null,
+      donationType: map['donation_type'] as String? ?? 'blood',
     );
   }
 }
@@ -489,7 +491,6 @@ class UpdateRequestAction {
     required String city,
     String? notes,
     required bool isUrgent,
-    required bool allowPhoneContact,
     DateTime? plannedDate,
   }) async {
     try {
@@ -505,7 +506,6 @@ class UpdateRequestAction {
             'city': city,
             'notes': notes,
             'is_urgent': isUrgent,
-            'allow_phone_contact': allowPhoneContact,
             'planned_date': isUrgent
                 ? null
                 : plannedDate?.toUtc().toIso8601String(),

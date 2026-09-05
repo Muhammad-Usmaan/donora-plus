@@ -28,6 +28,8 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.card,
     required this.volunteer,
     required this.compensated,
+    required this.chatbotGradientEdge,
+    required this.chatbotGradientCenter,
   });
 
   /// Brand crimson — primary buttons, active nav icon, brand mark.
@@ -78,6 +80,14 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Never red, never implies "paid".
   final Color compensated;
 
+  /// Dark charcoal — left/right edge of the AI chatbot card gradient.
+  /// Matches the marketing website hero section edges (#1B1B1F).
+  final Color chatbotGradientEdge;
+
+  /// Dark charcoal — center stop of the AI chatbot card gradient.
+  /// Slightly warmer than [chatbotGradientEdge] (#231C20).
+  final Color chatbotGradientCenter;
+
   /// Default light color tokens.
   static const light = AppColors(
     primary: Color(0xFFC62828),
@@ -95,6 +105,8 @@ class AppColors extends ThemeExtension<AppColors> {
     card: Color(0xFFFFFFFF),
     volunteer: Color(0xFF2A6F77),
     compensated: Color(0xFFF9A825),
+    chatbotGradientEdge: Color(0xFF1B1B1F),
+    chatbotGradientCenter: Color(0xFF231C20),
   );
 
   @override
@@ -114,6 +126,8 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? card,
     Color? volunteer,
     Color? compensated,
+    Color? chatbotGradientEdge,
+    Color? chatbotGradientCenter,
   }) {
     return AppColors(
       primary: primary ?? this.primary,
@@ -131,6 +145,8 @@ class AppColors extends ThemeExtension<AppColors> {
       card: card ?? this.card,
       volunteer: volunteer ?? this.volunteer,
       compensated: compensated ?? this.compensated,
+      chatbotGradientEdge: chatbotGradientEdge ?? this.chatbotGradientEdge,
+      chatbotGradientCenter: chatbotGradientCenter ?? this.chatbotGradientCenter,
     );
   }
 
@@ -153,6 +169,8 @@ class AppColors extends ThemeExtension<AppColors> {
       card: Color.lerp(card, other.card, t)!,
       volunteer: Color.lerp(volunteer, other.volunteer, t)!,
       compensated: Color.lerp(compensated, other.compensated, t)!,
+      chatbotGradientEdge: Color.lerp(chatbotGradientEdge, other.chatbotGradientEdge, t)!,
+      chatbotGradientCenter: Color.lerp(chatbotGradientCenter, other.chatbotGradientCenter, t)!,
     );
   }
 }

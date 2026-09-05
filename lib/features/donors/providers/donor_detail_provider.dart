@@ -32,6 +32,9 @@ class DonorProfile {
     this.hemoglobinLevel,
     this.latitude,
     this.longitude,
+    this.appreciatedCount = 0,
+    this.totalFeedbackCount = 0,
+    this.averageStarRating,
   });
 
   final String id;
@@ -63,6 +66,17 @@ class DonorProfile {
 
   final double? latitude;
   final double? longitude;
+
+  // Count of feedback rows where is_appreciated = true (from profiles_public).
+  final int appreciatedCount;
+
+  // Total count of feedback rows for this donor (from profiles_public).
+  // Zero when no feedback has been received.
+  final int totalFeedbackCount;
+
+  // Mean of star_rating across all feedback rows (from profiles_public).
+  // Null when no feedback has been received.
+  final double? averageStarRating;
 
   /// Whether this donor can plausibly donate right now: they must be in
   /// donor mode, and — when their last donation date is public — at least
@@ -108,6 +122,9 @@ class DonorProfile {
             : null,
         latitude: map['latitude'] != null ? (map['latitude'] as num).toDouble() : null,
         longitude: map['longitude'] != null ? (map['longitude'] as num).toDouble() : null,
+        appreciatedCount: map['appreciated_count'] as int? ?? 0,
+        totalFeedbackCount: map['total_feedback_count'] as int? ?? 0,
+        averageStarRating: (map['average_star_rating'] as num?)?.toDouble(),
       );
 }
 

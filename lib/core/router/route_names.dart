@@ -10,6 +10,7 @@ class RouteNames {
   static const String onboarding = 'onboarding';
   static const String auth = 'auth';
   static const String forgotPassword = 'forgot-password';
+  static const String verifyResetCode = 'verify-reset-code';
   static const String resetPassword = 'reset-password';
 
   // ── Authenticated routes ────────────────────────────────────────────
@@ -33,6 +34,12 @@ class RouteNames {
   static const String locationPicker = 'location-picker';
   static const String helpFaq = 'help-faq';
   static const String myRequests = 'my-requests';
+
+  // ── Profile sub-pages ────────────────────────────────────────────
+  static const String profileDonationOverview = 'profile-donation-overview';
+  static const String profileDonorSettings = 'profile-donor-settings';
+  static const String profileAccount = 'profile-account';
+  static const String profilePreferences = 'profile-preferences';
 }
 
 /// Route path segments (used inside GoRoute definitions).
@@ -43,6 +50,7 @@ class RoutePaths {
   static const String onboarding = '/onboarding';
   static const String auth = '/auth';
   static const String forgotPassword = '/forgot-password';
+  static const String verifyResetCode = '/verify-reset-code';
   static const String resetPassword = '/reset-password';
   static const String home = '/home';
   static const String verification = '/verification';
@@ -60,4 +68,10 @@ class RoutePaths {
   static const String locationPicker = '/location-picker';
   static const String helpFaq = '/help-faq';
   static const String myRequests = '/my-requests';
+
+  // ── Profile sub-pages ────────────────────────────────────────────
+  static const String profileDonationOverview = '/profile/donation-overview';
+  static const String profileDonorSettings = '/profile/donor-settings';
+  static const String profileAccount = '/profile/account';
+  static const String profilePreferences = '/profile/preferences';
 }

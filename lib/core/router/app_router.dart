@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../services/deep_link_handler.dart';
 import 'route_names.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/auth_screen.dart';
 import '../../features/auth/screens/forgot_password_screen.dart';
+import '../../features/auth/screens/verify_reset_code_screen.dart';
 import '../../features/auth/screens/set_new_password_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../core/providers/auth_providers.dart';
@@ -26,6 +26,10 @@ import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/my_requests_screen.dart';
 import '../../features/profile/screens/help_faq_screen.dart';
+import '../../features/profile/screens/donation_overview_screen.dart';
+import '../../features/profile/screens/donor_settings_screen.dart';
+import '../../features/profile/screens/account_settings_screen.dart';
+import '../../features/profile/screens/preferences_screen.dart';
 import '../../features/requests/screens/location_picker_screen.dart';
 import '../widgets/main_shell.dart';
 
@@ -86,13 +90,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.forgotPassword,
         builder: (_, _) => const ForgotPasswordScreen(),
       ),
-      // Password-reset deep-link target.  The recovery session is created
-      // by supabase_flutter when the user taps the reset link in their email.
+      // OTP verification step — user enters the 6-digit code from email.
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.verifyResetCode,
+        path: RoutePaths.verifyResetCode,
+        builder: (_, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return VerifyResetCodeScreen(email: email);
+        },
+      ),
+      // New-password step — reached after successful OTP verification.
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         name: RouteNames.resetPassword,
         path: RoutePaths.resetPassword,
-        builder: (_, _) => const SetNewPasswordScreen(),
+        builder: (_, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return SetNewPasswordScreen(email: email);
+        },
       ),
 
       // ── Bottom-nav shell (StatefulShellRoute preserves each tab) ──
@@ -245,6 +261,32 @@ final routerProvider = Provider<GoRouter>((ref) {
               state.uri.queryParameters['lng'] ?? ''),
         ),
       ),
+
+      // ── Profile sub-pages ──────────────────────────────────────────
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.profileDonationOverview,
+        path: RoutePaths.profileDonationOverview,
+        builder: (_, _) => const DonationOverviewScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.profileDonorSettings,
+        path: RoutePaths.profileDonorSettings,
+        builder: (_, _) => const DonorSettingsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.profileAccount,
+        path: RoutePaths.profileAccount,
+        builder: (_, _) => const AccountSettingsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.profilePreferences,
+        path: RoutePaths.profilePreferences,
+        builder: (_, _) => const PreferencesScreen(),
+      ),
     ],
     // ── Redirect guards ──────────────────────────────────────────────
     // Safety net: prevents deep-linking into authenticated routes when
@@ -260,23 +302,19 @@ final routerProvider = Provider<GoRouter>((ref) {
           path == RoutePaths.onboarding ||
           path == RoutePaths.auth ||
           path == RoutePaths.forgotPassword ||
+          path == RoutePaths.verifyResetCode ||
           path == RoutePaths.resetPassword ||
           path == RoutePaths.locationPicker;
-
-      // Password-recovery deep link: Supabase has exchanged the PKCE code
-      // for a recovery session.  Force-navigate to the reset-password screen
-      // regardless of other redirect rules.
-      if (DeepLinkHandler.isPasswordRecoveryActive &&
-          path != RoutePaths.resetPassword) {
-        return RoutePaths.resetPassword;
-      }
 
       // Signed-out user trying to access a protected route → auth.
       if (user == null && !isAuthFlow) return RoutePaths.auth;
 
       // Signed-in user trying to access auth/onboarding → home.
+      // Allow reset-password flow routes even with a temporary session
+      // (created by verifyOTP during the OTP recovery flow).
       if (user != null &&
-          (path == RoutePaths.auth || path == RoutePaths.onboarding)) {
+          (path == RoutePaths.auth || path == RoutePaths.onboarding) &&
+          path != RoutePaths.resetPassword) {
         return RoutePaths.home;
       }
 

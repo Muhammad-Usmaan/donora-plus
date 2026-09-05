@@ -3,21 +3,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../../services/deep_link_handler.dart';
+import '../providers/auth_form_provider.dart';
+import 'auth_screen.dart';
 
-/// "Set New Password" screen — reached via deep link after the user taps
-/// the password-reset link in their email.
+/// "Set New Password" screen — Step 3 of the OTP recovery flow.
 ///
-/// The recovery session is already established by `supabase_flutter` when
-/// this screen opens. The user enters a new password + confirmation,
-/// and on success the password is updated via [SupabaseAuthService.updatePassword].
+/// Reached after the user successfully verifies the recovery OTP.
+/// The recovery session is already established by `verifyOTP`.
+/// The user enters a new password + confirmation, and on success
+/// the password is updated and the user is signed out for clean re-login.
+///
+/// Shows a success snackbar on the Login screen after redirect.
 class SetNewPasswordScreen extends ConsumerStatefulWidget {
-  const SetNewPasswordScreen({super.key});
+  const SetNewPasswordScreen({super.key, required this.email});
+
+  /// The email being reset (received via query param).
+  final String email;
 
   @override
   ConsumerState<SetNewPasswordScreen> createState() =>
@@ -31,9 +36,20 @@ class _SetNewPasswordScreenState extends ConsumerState<SetNewPasswordScreen> {
 
   bool _obscurePw = true;
   bool _obscureConfirm = true;
-  bool _isLoading = false;
-  String? _error;
-  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer reset to after mount completes — calling reset() synchronously
+    // in initState can fire state-change notifications during the mount
+    // phase, which destabilises GoRouter's navigation transition and
+    // causes a mount-loop StackOverflowError on second+ flow entries.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(resetPasswordNotifierProvider.notifier).reset();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -43,66 +59,33 @@ class _SetNewPasswordScreenState extends ConsumerState<SetNewPasswordScreen> {
   }
 
   Future<void> _submit() async {
-    if (_isLoading) return;
+    if (ref.read(resetPasswordNotifierProvider).isLoading) return;
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    await ref
+        .read(resetPasswordNotifierProvider.notifier)
+        .submit(_passwordCtrl.text);
 
-    try {
-      await ref
-          .read(authServiceProvider)
-          .updatePassword(_passwordCtrl.text);
-
-      // Password updated — sign out the recovery session so the user
-      // returns to the login screen with their new credentials.
-      await ref.read(authServiceProvider).signOut();
-      DeepLinkHandler.clearRecoveryFlag();
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _done = true;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = _friendlyError(e);
-      });
+    if (!mounted) return;
+    final state = ref.read(resetPasswordNotifierProvider);
+    if (state.done) {
+      // Set the flag so AuthScreen shows a success snackbar.
+      AuthScreen.showResetSuccess = true;
+      context.goNamed(RouteNames.auth);
     }
-  }
-
-  /// Converts common auth exceptions into user-friendly messages.
-  String _friendlyError(Object e) {
-    final s = e.toString().toLowerCase();
-    if (s.contains('password') && s.contains('weak')) {
-      return 'Password is too weak. Please choose a stronger password (at least 6 characters).';
-    }
-    if (s.contains('expired') || s.contains('invalid')) {
-      return 'This reset link has expired or is invalid. Please request a new one.';
-    }
-    if (e.isNetworkError) {
-      return 'No internet connection. Please check your network and try again.';
-    }
-    return 'Something went wrong. Please try again.';
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final rpState = ref.watch(resetPasswordNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const PhosphorIcon(PhosphorIconsRegular.arrowLeft),
-          onPressed: () {
-            DeepLinkHandler.clearRecoveryFlag();
-            context.goNamed(RouteNames.auth);
-          },
+          onPressed: () => context.goNamed(RouteNames.auth),
         ),
       ),
       backgroundColor: colors.surface,
@@ -137,98 +120,85 @@ class _SetNewPasswordScreenState extends ConsumerState<SetNewPasswordScreen> {
               ),
               const SizedBox(height: 32),
 
-              // ── Success state ────────────────────────────────────
-              if (_done) ...[
-                const _SuccessBanner(
-                  message: 'Password updated successfully!',
-                ),
-                const SizedBox(height: 24),
-                PrimaryButton(
-                  label: 'Continue to Log In',
-                  onPressed: () => context.goNamed(RouteNames.auth),
-                ),
-              ]
-
-              // ── Form state ───────────────────────────────────────
-              else ...[
-                if (_error != null) ...[
-                  _ErrorBanner(message: _error!),
-                  const SizedBox(height: 16),
-                ],
-
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── New password ──────────────────────────────
-                      TextFormField(
-                        controller: _passwordCtrl,
-                        obscureText: _obscurePw,
-                        textInputAction: TextInputAction.next,
-                        onChanged: (_) {
-                          if (_error != null) setState(() => _error = null);
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'New password',
-                          prefixIcon: const PhosphorIcon(
-                            PhosphorIconsRegular.lockSimple,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: PhosphorIcon(
-                              _obscurePw
-                                  ? PhosphorIconsRegular.eye
-                                  : PhosphorIconsRegular.eyeClosed,
-                              size: 20,
-                            ),
-                            onPressed: () =>
-                                setState(() => _obscurePw = !_obscurePw),
-                          ),
-                        ),
-                        validator: (v) =>
-                            Validators.minLength(v, 6, 'Password'),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── Confirm password ──────────────────────────
-                      TextFormField(
-                        controller: _confirmCtrl,
-                        obscureText: _obscureConfirm,
-                        textInputAction: TextInputAction.done,
-                        onChanged: (_) {
-                          if (_error != null) setState(() => _error = null);
-                        },
-                        onFieldSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          labelText: 'Confirm password',
-                          prefixIcon: const PhosphorIcon(
-                            PhosphorIconsRegular.lockSimple,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: PhosphorIcon(
-                              _obscureConfirm
-                                  ? PhosphorIconsRegular.eye
-                                  : PhosphorIconsRegular.eyeClosed,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(
-                                () => _obscureConfirm = !_obscureConfirm),
-                          ),
-                        ),
-                        validator: (v) =>
-                            Validators.confirmPassword(v, _passwordCtrl.text),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                PrimaryButton(
-                  label: 'Update Password',
-                  isLoading: _isLoading,
-                  onPressed: _submit,
-                ),
+              // ── Error ────────────────────────────────────────────
+              if (rpState.error != null) ...[
+                _ErrorBanner(message: rpState.error!),
+                const SizedBox(height: 16),
               ],
+
+              // ── Form ─────────────────────────────────────────────
+              Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── New password ──────────────────────────────
+                    TextFormField(
+                      controller: _passwordCtrl,
+                      obscureText: _obscurePw,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) {
+                        ref.read(resetPasswordNotifierProvider.notifier).clearError();
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'New password',
+                        prefixIcon: const PhosphorIcon(
+                          PhosphorIconsRegular.lockSimple,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: PhosphorIcon(
+                            _obscurePw
+                                ? PhosphorIconsRegular.eye
+                                : PhosphorIconsRegular.eyeClosed,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscurePw = !_obscurePw),
+                        ),
+                      ),
+                      validator: (v) =>
+                          Validators.minLength(v, 6, 'Password'),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Confirm password ──────────────────────────
+                    TextFormField(
+                      controller: _confirmCtrl,
+                      obscureText: _obscureConfirm,
+                      textInputAction: TextInputAction.done,
+                      onChanged: (_) {
+                        ref.read(resetPasswordNotifierProvider.notifier).clearError();
+                      },
+                      onFieldSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
+                        labelText: 'Confirm password',
+                        prefixIcon: const PhosphorIcon(
+                          PhosphorIconsRegular.lockSimple,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: PhosphorIcon(
+                            _obscureConfirm
+                                ? PhosphorIconsRegular.eye
+                                : PhosphorIconsRegular.eyeClosed,
+                            size: 20,
+                          ),
+                          onPressed: () => setState(
+                              () => _obscureConfirm = !_obscureConfirm),
+                        ),
+                      ),
+                      validator: (v) =>
+                          Validators.confirmPassword(v, _passwordCtrl.text),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              PrimaryButton(
+                label: 'Update Password',
+                isLoading: rpState.isLoading,
+                onPressed: _submit,
+              ),
             ],
           ),
         ),
@@ -237,7 +207,7 @@ class _SetNewPasswordScreenState extends ConsumerState<SetNewPasswordScreen> {
   }
 }
 
-// ── Inline feedback banners (same pattern as auth_screen.dart) ─────────────
+// ── Inline feedback banner (same pattern as auth_screen.dart) ─────────────
 
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.message});
@@ -269,46 +239,6 @@ class _ErrorBanner extends StatelessWidget {
               message,
               style: context.textTheme.bodyMedium?.copyWith(
                 color: colors.urgent,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SuccessBanner extends StatelessWidget {
-  const _SuccessBanner({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: colors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colors.primary.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          PhosphorIcon(
-            PhosphorIconsRegular.checkCircle,
-            size: 20,
-            color: colors.primary,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: context.textTheme.bodyMedium?.copyWith(
-                color: colors.primary,
                 fontWeight: FontWeight.w500,
               ),
             ),

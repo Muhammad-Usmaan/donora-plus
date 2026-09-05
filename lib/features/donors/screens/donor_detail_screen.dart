@@ -394,6 +394,49 @@ class _DonorDetailBodyState extends ConsumerState<_DonorDetailBody> {
             ],
           ),
 
+        // Appreciation stats — visible when the donor has any donations.
+        if ((_donor.totalDonations ?? 0) > 0) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: colors.secondaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: _donor.totalFeedbackCount > 0
+                ? Row(
+                    children: [
+                      Icon(Icons.star, size: 16, color: colors.warning),
+                      const SizedBox(width: 4),
+                      Text(
+                        _donor.averageStarRating?.toStringAsFixed(1) ?? '—',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: colors.textHigh,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${_donor.appreciatedCount}/${_donor.totalFeedbackCount} appreciated',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colors.textMedium,
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    'No feedback yet',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: colors.textMedium,
+                    ),
+                  ),
+          ),
+        ],
+
         // Last donation (only when the donor made it public)
         if (_donor.showLastDonationDate && _donor.lastDonationDate != null) ...[
           const SizedBox(height: 10),

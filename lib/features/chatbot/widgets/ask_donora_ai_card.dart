@@ -21,11 +21,20 @@ class AskDonoraAiCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: colors.secondaryContainer,
+            gradient: LinearGradient(
+              colors: [
+                colors.chatbotGradientEdge,
+                colors.chatbotGradientCenter,
+                colors.chatbotGradientEdge,
+              ],
+              stops: const [0.0, 0.5, 1.0],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -37,12 +46,12 @@ class AskDonoraAiCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: colors.secondary.withValues(alpha: 0.12),
+                  color: Colors.white.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: PhosphorIcon(
                   PhosphorIconsRegular.sparkle,
-                  color: colors.secondary,
+                  color: Colors.white,
                   size: 22,
                 ),
               ),
@@ -51,14 +60,19 @@ class AskDonoraAiCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Ask Donora AI', style: context.textTheme.titleMedium),
+                    Text(
+                      'Ask Donora AI',
+                      style: context.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       'Get quick answers about donating or requesting blood.',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: context.textTheme.bodySmall?.copyWith(
-                        color: colors.textMedium,
+                        color: Colors.white70,
                       ),
                     ),
                   ],
@@ -67,7 +81,7 @@ class AskDonoraAiCard extends StatelessWidget {
               const SizedBox(width: 8),
               PhosphorIcon(
                 PhosphorIconsRegular.caretRight,
-                color: colors.textMedium,
+                color: Colors.white70,
                 size: 20,
               ),
             ],

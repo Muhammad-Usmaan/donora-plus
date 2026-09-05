@@ -3,26 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/providers/auth_providers.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/extensions.dart';
-import '../../../core/widgets/app_card.dart'; 
+import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_dialog.dart';
-import '../../../core/widgets/blood_type_chip.dart';
-import '../../../core/widgets/donor_status_chip.dart';
-import '../../../core/widgets/stat_tile.dart';
-import '../../../core/widgets/verified_badge.dart';
 import '../../home/providers/home_providers.dart';
+import '../../chat/providers/chat_providers.dart';
+import '../../notifications/providers/notification_providers.dart';
 import '../providers/profile_providers.dart';
-import '../widgets/donation_history_sheet.dart';
-import '../widgets/notification_settings_sheet.dart';
 import '../widgets/profile_dialogs.dart';
 
 /// Profile & Settings screen for Donora+.
 ///
-/// Scrollable single-column layout with grouped AppCard sections,
-/// 24px section spacing per the design system.
+/// Lightweight landing page with navigation entries to sub-pages.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -87,7 +84,7 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-// â”€â”€ Profile body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Profile body ─────────────────────────────────────────────────────────────
 
 class _ProfileBody extends ConsumerWidget {
   const _ProfileBody({required this.profile});
@@ -98,152 +95,63 @@ class _ProfileBody extends ConsumerWidget {
       profile.activeRole == 'donor' ||
       profile.donorClassification.isNotEmpty;
 
-  /// Subtitle for the Phone Number row.
-  String? _phoneSubtitle(UserProfile p) {
-    if (p.phone == null || p.phone!.isEmpty) {
-      return 'Not set â€” tap to add';
-    }
-    return p.phone;
-  }
-
-  /// Email is fixed for security â€” explain instead of allowing edits.
-  void _showEmailInfoDialog(BuildContext context) {
-    // Use showDialog with a builder so Navigator.of(ctx) targets the
-    // dialog's own layer â€” not the GoRouter shell (avoids "last page" crash).
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AppDialog(
-        title: 'Email Address',
-        message: 'For security reasons, your email address can\'t be '
-            'changed. It is used to sign in to Donora+.',
-        icon: Icons.alternate_email,
-        iconColor: context.colors.secondary,
-        actions: [
-          DialogActionButton(
-            label: 'Got It',
-            onPressed: () => Navigator.of(ctx).pop(),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       children: [
-        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        _ProfileHeader(profile: profile),
+        // Header (with verification + top-donor badges)
+        _RedesignedHeader(profile: profile),
+        const SizedBox(height: 16),
+
+        // Role toggle (promoted from Preferences)
+        _RoleSwitcherRow(currentRole: profile.activeRole),
         const SizedBox(height: 24),
 
-        // â”€â”€ Stats: Blood Type / Donated / Requested â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        _StatsRow(profile: profile),
-        const SizedBox(height: 24),
-
-        // â”€â”€ Account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        const _SectionTitle(title: 'Account'),
-        const SizedBox(height: 8),
+        // ── Navigation entries ──────────────────────────────────────
         AppCard(
           padding: EdgeInsets.zero,
           child: Column(
             children: [
               _SettingsRow(
-                icon: Icons.person_outline,
-                label: 'Edit Profile',
-                onTap: () => showEditNameDialog(
-                  context,
-                  ref: ref,
-                  currentName: profile.name,
+                icon: Icons.bar_chart,
+                label: 'Donation Overview',
+                onTap: () => context.pushNamed(
+                    RouteNames.profileDonationOverview),
+              ),
+              if (_isDonor) ...[
+                const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.settings_outlined,
+                  label: 'Donor Settings',
+                  onTap: () => context.pushNamed(
+                      RouteNames.profileDonorSettings),
                 ),
+              ],
+              const Divider(height: 1),
+              _SettingsRow(
+                icon: Icons.account_circle_outlined,
+                label: 'Account',
+                onTap: () => context.pushNamed(
+                    RouteNames.profileAccount),
               ),
               const Divider(height: 1),
               _SettingsRow(
-                icon: Icons.lock_outline,
-                label: 'Change Password',
-                onTap: () => showChangePasswordDialog(context, ref: ref),
-              ),
-              const Divider(height: 1),
-              _SettingsRow(
-                icon: Icons.phone_outlined,
-                label: 'Phone Number',
-                subtitle: _phoneSubtitle(profile),
-                onTap: () => showEditPhoneDialog(
-                  context,
-                  ref: ref,
-                  currentPhone: profile.phone,
-                ),
-              ),
-              const Divider(height: 1),
-              _SettingsRow(
-                icon: Icons.alternate_email,
-                label: 'Email',
-                subtitle: profile.email,
-                showChevron: false,
-                trailing: Icon(
-                  Icons.lock_outline,
-                  size: 16,
-                  color: context.colors.textMedium,
-                ),
-                onTap: () => _showEmailInfoDialog(context),
+                icon: Icons.tune,
+                label: 'Preferences',
+                onTap: () => context.pushNamed(
+                    RouteNames.profilePreferences),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
 
-        // â”€â”€ Donor Settings (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        if (_isDonor) ...[
-          const _SectionTitle(title: 'Donor Settings'),
-          const SizedBox(height: 8),
-          AppCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                _SettingsRow(
-                  icon: Icons.bloodtype,
-                  label: 'Blood Type',
-                  trailing: BloodTypeChip(
-                    bloodType: profile.bloodGroup.isNotEmpty
-                        ? profile.bloodGroup
-                        : 'â€”',
-                  ),
-                  onTap: () => _showBloodTypePicker(context, ref),
-                ),
-                const Divider(height: 1),
-                _SettingsRow(
-                  icon: Icons.history,
-                  label: 'Donation History',
-                  onTap: () => showDonationHistorySheet(context),
-                ),
-                const Divider(height: 1),
-                _ClassificationToggleRow(
-                  current: profile.donorClassification,
-                ),
-                const Divider(height: 1),
-                _SettingsRow(
-                  icon: Icons.bloodtype,
-                  label: 'Hemoglobin Level (g/dL)',
-                  subtitle: profile.hemoglobinLevel != null
-                      ? profile.hemoglobinLevel!.toStringAsFixed(1)
-                      : 'Not set — tap to add',
-                  onTap: () => showEditHemoglobinDialog(
-                    context,
-                    ref: ref,
-                    currentValue: profile.hemoglobinLevel,
-                  ),
-                ),
-                const Divider(height: 1),
-                _VerificationStatusRow(
-                  isVerified: profile.isVerified,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
+        // Emergency
+        const _EmergencyCard(),
+        const SizedBox(height: 16),
 
-        // â”€â”€ Request History (seeker only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Request History (seeker only)
         if (profile.activeRole == 'seeker') ...[
           AppCard(
             padding: EdgeInsets.zero,
@@ -253,38 +161,10 @@ class _ProfileBody extends ConsumerWidget {
               onTap: () => context.pushNamed(RouteNames.myRequests),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
         ],
-        const _SectionTitle(title: 'Preferences'),
-        const SizedBox(height: 8),
-        AppCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              _SettingsRow(
-                icon: Icons.notifications_outlined,
-                label: 'Notifications',
-                onTap: () => showNotificationSettingsSheet(context),
-              ),
-              const Divider(height: 1),
-              _SettingsRow(
-                icon: Icons.location_city,
-                label: 'City / Location',
-                subtitle: profile.city.isNotEmpty ? profile.city : null,
-                onTap: () => showCityDialog(
-                  context,
-                  ref: ref,
-                  currentCity: profile.city,
-                ),
-              ),
-              const Divider(height: 1),
-              _RoleSwitcherRow(currentRole: profile.activeRole),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
 
-        // â”€â”€ Support â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Support ─────────────────────────────────────────────────
         const _SectionTitle(title: 'Support'),
         const SizedBox(height: 8),
         AppCard(
@@ -311,9 +191,9 @@ class _ProfileBody extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
 
-        // â”€â”€ Account Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Account Actions ─────────────────────────────────────────
         const _SectionTitle(title: 'Account Actions'),
         const SizedBox(height: 8),
         const AppCard(
@@ -330,417 +210,31 @@ class _ProfileBody extends ConsumerWidget {
     );
   }
 
-  // â”€â”€ Dialogs & bottom sheets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  void _showBloodTypePicker(BuildContext context, WidgetRef ref) {
-    final bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    final colors = context.colors;
-
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Drag handle
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colors.border,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Select Blood Type',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: colors.textHigh,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Your blood type helps match you with requests.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: colors.textMedium,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: bloodTypes.map((bt) {
-                  final isSelected = profile.bloodGroup == bt;
-                  return GestureDetector(
-                    onTap: () async {
-                      Navigator.of(ctx).pop();
-                      try {
-                        await ref.read(updateProfileFieldProvider)(
-                            {'blood_group': bt});
-                        if (context.mounted) {
-                          context.showSnackBar('Blood type updated to $bt');
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          context.showSnackBar(
-                              'Update failed: $e', isError: true);
-                        }
-                      }
-                    },
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? colors.primary
-                            : colors.card,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? colors.primary
-                              : colors.border,
-                          width: 1.5,
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        bt,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: isSelected ? Colors.white : colors.textHigh,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAboutDialog(BuildContext context) {
-    showAboutDialog(
-      context: context,
-      applicationName: 'Donora+',
-      applicationVersion: '1.0.0',
-      applicationLegalese: '\u00a9 2025 Donora',
-      children: [
-        const SizedBox(height: 12),
-        const Text(
-          'Donora+ connects blood donors and seekers '
-          'to save lives in your community.',
-        ),
-      ],
-    );
-  }
-}
-
-// â”€â”€ Profile header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-class _ProfileHeader extends ConsumerStatefulWidget {
-  const _ProfileHeader({required this.profile});
-
-  final UserProfile profile;
-
-  @override
-  ConsumerState<_ProfileHeader> createState() => _ProfileHeaderState();
-}
-
-class _ProfileHeaderState extends ConsumerState<_ProfileHeader> {
-  bool _isUploading = false;
-
-  Future<void> _pickAndUpload(ImageSource source) async {
-    setState(() => _isUploading = true);
+  void _showAboutDialog(BuildContext context) async {
+    final uri = Uri.parse('https://donoraplus.vercel.app/');
     try {
-      await ref
-          .read(uploadProfilePhotoAction)(source);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          context.showSnackBar(
+            'Could not open website. Please try again.',
+            isError: true,
+          );
+        }
+      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
+      if (context.mounted) {
+        context.showSnackBar(
+          'Could not open website. Please try again.',
+          isError: true,
         );
       }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
     }
   }
-
-  void _showPhotoSourceSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final colors = context.colors;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Drag handle
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: colors.border,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Change Profile Photo',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: colors.textHigh,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: colors.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.photo_library,
-                        size: 20, color: colors.primary),
-                  ),
-                  title: const Text('Choose from Gallery'),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _pickAndUpload(ImageSource.gallery);
-                  },
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: colors.secondaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.camera_alt,
-                        size: 20, color: colors.secondary),
-                  ),
-                  title: const Text('Take a Photo'),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _pickAndUpload(ImageSource.camera);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final profile = widget.profile;
-
-    return Column(
-      children: [
-        // Editable avatar
-        GestureDetector(
-          onTap: _isUploading ? null : _showPhotoSourceSheet,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Avatar (with opacity overlay when uploading)
-              Opacity(
-                opacity: _isUploading ? 0.4 : 1.0,
-                child: _LargeProfileAvatar(
-                  name: profile.name,
-                  photoUrl: profile.profilePhotoUrl,
-                ),
-              ),
-
-              // Upload spinner
-              if (_isUploading)
-                const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: Colors.white,
-                  ),
-                ),
-
-              // Camera badge (hidden during upload)
-              if (!_isUploading)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: colors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: colors.card, width: 2),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // Name
-        Text(
-          profile.name.isNotEmpty ? profile.name : 'Your Name',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: colors.textHigh,
-          ),
-          textAlign: TextAlign.center,
-        ),
-
-        // City
-        if (profile.city.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            profile.city,
-            style: TextStyle(
-              fontSize: 14,
-              color: colors.textMedium,
-            ),
-          ),
-        ],
-        const SizedBox(height: 10),
-
-        // Badges row
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (profile.isVerified) const VerifiedBadge(),
-            if (profile.donorClassification.isNotEmpty)
-              DonorStatusChip(
-                classification: profile.donorClassification,
-              ),
-            if (profile.isTopDonor) const _TopDonorBadge(),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
-// â”€â”€ Large profile avatar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-class _LargeProfileAvatar extends StatelessWidget {
-  const _LargeProfileAvatar({required this.name, this.photoUrl});
-
-  final String name;
-  final String? photoUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    if (photoUrl != null && photoUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 48,
-        backgroundImage: NetworkImage(photoUrl!),
-        backgroundColor: colors.primaryContainer,
-      );
-    }
-
-    return CircleAvatar(
-      radius: 48,
-      backgroundColor: colors.primaryContainer,
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: TextStyle(
-          fontSize: 36,
-          fontWeight: FontWeight.w700,
-          color: colors.primary,
-        ),
-      ),
-    );
-  }
-}
-
-// â”€â”€ Stats row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-/// Blood Type / Donated / Requested counters â€” relocated here from the
-/// removed Requests bottom-nav tab (design spec Â§4.2).
-class _StatsRow extends ConsumerWidget {
-  const _StatsRow({required this.profile});
-
-  final UserProfile profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final requestCount = ref
-        .watch(myRequestCountProvider)
-        .whenOrNull(data: (count) => '$count');
-
-    return Row(
-      children: [
-        Expanded(
-          child: StatTile(
-            value: profile.bloodGroup.isNotEmpty ? profile.bloodGroup : 'â€”',
-            caption: 'Blood Type',
-            valueColor: context.colors.primary,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: StatTile(
-            value: '${profile.totalDonations}',
-            caption: 'Donated',
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: StatTile(
-            value: requestCount ?? 'â€”',
-            caption: 'Requested',
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// â”€â”€ Section title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Section title ────────────────────────────────────────────────────────────
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title});
@@ -762,7 +256,7 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-// â”€â”€ Settings row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Settings row ─────────────────────────────────────────────────────────────
 
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
@@ -837,183 +331,7 @@ class _SettingsRow extends StatelessWidget {
   }
 }
 
-// â”€â”€ Classification toggle row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-class _ClassificationToggleRow extends ConsumerWidget {
-  const _ClassificationToggleRow({required this.current});
-
-  final String current;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
-    final isVolunteer = current == 'volunteer';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Label row
-          Row(
-            children: [
-              Icon(Icons.people_outline, size: 20, color: colors.textMedium),
-              const SizedBox(width: 10),
-              Text(
-                'Classification',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: colors.textHigh,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // Full-width pill toggle
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: colors.border, width: 1),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ToggleOption(
-                    label: 'Volunteer',
-                    selected: isVolunteer,
-                    onTap: () {
-                      ref.read(updateProfileFieldProvider)(
-                          {'donor_classification': 'volunteer'});
-                    },
-                  ),
-                ),
-                Expanded(
-                  child: _ToggleOption(
-                    label: 'Compensated',
-                    selected: !isVolunteer,
-                    onTap: () {
-                      ref.read(updateProfileFieldProvider)(
-                          {'donor_classification': 'compensated'});
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ToggleOption extends StatelessWidget {
-  const _ToggleOption({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? colors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : colors.textMedium,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// â”€â”€ Verification status row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-class _VerificationStatusRow extends StatelessWidget {
-  const _VerificationStatusRow({required this.isVerified});
-
-  final bool isVerified;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return InkWell(
-      onTap: () {
-        if (!isVerified) {
-          context.pushNamed(RouteNames.verification);
-        }
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(Icons.verified_user_outlined,
-                size: 22, color: colors.textMedium),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Verification Status',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: colors.textHigh,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    isVerified
-                        ? 'Verified'
-                        : 'Not verified! Tap to submit',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color:
-                          isVerified ? colors.success : colors.urgent,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isVerified)
-              const VerifiedBadge(compact: true)
-            else
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: colors.textMedium,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// â”€â”€ Role switcher row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Role switcher row ────────────────────────────────────────────────────────
 
 class _RoleSwitcherRow extends ConsumerStatefulWidget {
   const _RoleSwitcherRow({required this.currentRole});
@@ -1025,7 +343,6 @@ class _RoleSwitcherRow extends ConsumerStatefulWidget {
 }
 
 class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
-  /// Returns the age in whole years for a given [date].
   int _computeAge(DateTime date) {
     final now = DateTime.now();
     int age = now.year - date.year;
@@ -1042,7 +359,6 @@ class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
     final dob = profile?.dateOfBirth;
 
     if (dob == null) {
-      // DOB not collected — prompt user to add it.
       showDialog<void>(
         context: context,
         builder: (ctx) => AppDialog(
@@ -1108,7 +424,6 @@ class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
         'date_of_birth': formatted,
       });
       if (!mounted) return;
-      // DOB saved — now attempt the role switch.
       ref.read(switchRoleActionProvider)('donor');
     } catch (e) {
       if (mounted) {
@@ -1124,52 +439,29 @@ class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
     final activeRole = ref.watch(activeRoleProvider);
     final isSeeker = activeRole == 'seeker';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colors.border, width: 1),
+      ),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(Icons.swap_horiz, size: 20, color: colors.textMedium),
-              const SizedBox(width: 10),
-              Text(
-                'Account Role',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: colors.textHigh,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: colors.border, width: 1),
+          Expanded(
+            child: _ToggleOption(
+              label: 'Seeker',
+              selected: isSeeker,
+              onTap: () {
+                ref.read(switchRoleActionProvider)('seeker');
+              },
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ToggleOption(
-                    label: 'Seeker',
-                    selected: isSeeker,
-                    onTap: () {
-                      ref.read(switchRoleActionProvider)('seeker');
-                    },
-                  ),
-                ),
-                Expanded(
-                  child: _ToggleOption(
-                    label: 'Donor',
-                    selected: !isSeeker,
-                    onTap: _onDonorTap,
-                  ),
-                ),
-              ],
+          ),
+          Expanded(
+            child: _ToggleOption(
+              label: 'Donor',
+              selected: !isSeeker,
+              onTap: _onDonorTap,
             ),
           ),
         ],
@@ -1178,7 +470,45 @@ class _RoleSwitcherRowState extends ConsumerState<_RoleSwitcherRow> {
   }
 }
 
-// â”€â”€ Logout row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+class _ToggleOption extends StatelessWidget {
+  const _ToggleOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? colors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : colors.textMedium,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Logout row ───────────────────────────────────────────────────────────────
 
 class _LogoutRow extends ConsumerStatefulWidget {
   const _LogoutRow();
@@ -1193,7 +523,6 @@ class _LogoutRowState extends ConsumerState<_LogoutRow> {
   Future<void> _handleLogout() async {
     if (_isLoggingOut) return;
 
-    // Confirm before proceeding — matches the delete-account flow.
     final confirmed = await showConfirmDialog(
       context: context,
       title: 'Log out?',
@@ -1205,8 +534,6 @@ class _LogoutRowState extends ConsumerState<_LogoutRow> {
 
     setState(() => _isLoggingOut = true);
 
-    // Non-dismissible loading dialog while sign-out completes.
-    // Matches the pattern used by _DeleteAccountRow.
     if (!mounted) return;
     showDialog<void>(
       context: context,
@@ -1232,7 +559,6 @@ class _LogoutRowState extends ConsumerState<_LogoutRow> {
     try {
       await ref.read(logoutActionProvider)();
     } catch (_) {
-      // Logout failed — dismiss loading dialog and show error.
       if (mounted) Navigator.of(context).pop();
       if (mounted) {
         setState(() => _isLoggingOut = false);
@@ -1271,7 +597,7 @@ class _LogoutRowState extends ConsumerState<_LogoutRow> {
   }
 }
 
-// â”€â”€ Delete account row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Delete account row ───────────────────────────────────────────────────────
 
 class _DeleteAccountRow extends ConsumerWidget {
   const _DeleteAccountRow();
@@ -1315,8 +641,6 @@ class _DeleteAccountRow extends ConsumerWidget {
     ).then((confirmed) async {
       if (!confirmed) return;
 
-      // Show a non-dismissible loading dialog while the Edge Function
-      // processes the deletion (cleans up data + removes auth user).
       if (!context.mounted) return;
       showDialog<void>(
         context: context,
@@ -1342,7 +666,6 @@ class _DeleteAccountRow extends ConsumerWidget {
       final success =
           await ref.read(deleteAccountActionProvider)();
 
-      // Close the loading dialog.
       if (context.mounted) Navigator.of(context).pop();
 
       if (context.mounted && !success) {
@@ -1355,36 +678,424 @@ class _DeleteAccountRow extends ConsumerWidget {
   }
 }
 
-// â”€â”€ Top donor badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Redesigned header ────────────────────────────────────────────────────────
 
-class _TopDonorBadge extends StatelessWidget {
-  const _TopDonorBadge();
+class _RedesignedHeader extends ConsumerStatefulWidget {
+  const _RedesignedHeader({required this.profile});
+  final UserProfile profile;
+
+  @override
+  ConsumerState<_RedesignedHeader> createState() =>
+      _RedesignedHeaderState();
+}
+
+class _RedesignedHeaderState extends ConsumerState<_RedesignedHeader> {
+  bool _isUploading = false;
+
+  Future<void> _pickAndUpload(ImageSource source) async {
+    setState(() => _isUploading = true);
+    try {
+      await ref.read(uploadProfilePhotoAction)(source);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  void _showPhotoSourceSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final colors = context.colors;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.border,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Change Profile Photo',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textHigh,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.photo_library,
+                        size: 20, color: colors.primary),
+                  ),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _pickAndUpload(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.secondaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.camera_alt,
+                        size: 20, color: colors.secondary),
+                  ),
+                  title: const Text('Take a Photo'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _pickAndUpload(ImageSource.camera);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: const Color(0xFFF9A825).withValues(alpha: 0.4),
-          width: 1,
+    final colors = context.colors;
+    final profile = widget.profile;
+
+    return Row(
+      children: [
+        // Avatar with verification + top-donor badge overlays
+        GestureDetector(
+          onTap: _isUploading ? null : _showPhotoSourceSheet,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              Opacity(
+                opacity: _isUploading ? 0.4 : 1.0,
+                child: _CompactAvatar(
+                  name: profile.name,
+                  photoUrl: profile.profilePhotoUrl,
+                ),
+              ),
+              if (_isUploading)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                ),
+              // Verification badge — bottom-right corner
+              if (profile.isVerified && !_isUploading)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: colors.success,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.card, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      size: 13,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              // Top donor badge — top-right corner
+              if (profile.isTopDonor && !_isUploading)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: colors.warning,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.card, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.star,
+                      size: 13,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+
+        // Greeting + join date
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hey ${profile.name.split(' ').first}!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textHigh,
+                ),
+              ),
+              if (profile.createdAt != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    Formatters.dateShort(profile.createdAt!),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colors.textMedium,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        // Message icon
+        GestureDetector(
+          onTap: () => context.pushNamed(RouteNames.chat),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colors.card,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(
+                  child: PhosphorIcon(
+                    PhosphorIconsRegular.chatCircle,
+                    size: 20,
+                    color: colors.textHigh,
+                  ),
+                ),
+                // Red dot — only when there are unread messages.
+                if (ref.watch(unreadMessageCountProvider) > 0)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: colors.urgent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.card, width: 1.5),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // Notification bell
+        GestureDetector(
+          onTap: () => context.pushNamed(RouteNames.notifications),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colors.card,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(
+                  child: Icon(
+                    Icons.notifications_outlined,
+                    size: 20,
+                    color: colors.textHigh,
+                  ),
+                ),
+                // Red dot — only when there are unread notifications.
+                if (ref.watch(unreadNotificationCountProvider) > 0)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: colors.urgent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.card, width: 1.5),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Compact avatar ───────────────────────────────────────────────────────────
+
+class _CompactAvatar extends StatelessWidget {
+  const _CompactAvatar({required this.name, this.photoUrl});
+  final String name;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    if (photoUrl != null && photoUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 32,
+        backgroundImage: NetworkImage(photoUrl!),
+        backgroundColor: colors.primaryContainer,
+      );
+    }
+    return CircleAvatar(
+      radius: 32,
+      backgroundColor: colors.primaryContainer,
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.w700,
+          color: colors.primary,
         ),
       ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
+    );
+  }
+}
+
+// ── Emergency Card ───────────────────────────────────────────────────────────
+
+/// External URL for emergency/precautions info.
+/// Temporary placeholder until a dedicated blog/precautions page exists
+/// on the marketing site — one-line change when the real URL is ready.
+const String emergencyInfoUrl = 'https://donoraplus.vercel.app/faq';
+
+class _EmergencyCard extends StatelessWidget {
+  const _EmergencyCard();
+
+  Future<void> _openEmergencyInfo(BuildContext context) async {
+    final uri = Uri.parse(emergencyInfoUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          context.showSnackBar('Could not open $emergencyInfoUrl');
+        }
+      }
+    } catch (_) {
+      if (context.mounted) {
+        context.showSnackBar('Could not open $emergencyInfoUrl');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return AppCard(
+      onTap: () => _openEmergencyInfo(context),
+      child: Row(
         children: [
-          Icon(Icons.emoji_events, size: 14, color: Color(0xFFF9A825)),
-          SizedBox(width: 4),
-          Text(
-            'Top Donor',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFFB8860B),
-              letterSpacing: 0.3,
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: colors.urgentContainer,
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Icon(
+              Icons.emergency,
+              size: 22,
+              color: colors.urgent,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Emergency',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textHigh,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Stay Safe After Giving Blood.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.textMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: colors.textMedium,
           ),
         ],
       ),

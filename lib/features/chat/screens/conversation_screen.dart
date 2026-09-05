@@ -36,6 +36,11 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   final _messageController = TextEditingController();
   bool _isSending = false;
 
+  // ID of the first unread message (from other user) at the time the
+  // screen opened. Used to render the "UNREAD MESSAGES" divider.
+  // Captured once before the mark-as-read call erases the information.
+  String? _firstUnreadMessageId;
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +98,29 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       conversationMessagesProvider(widget.conversationId),
     );
 
+    // Capture the first-unread divider position once, before the
+    // mark-as-read call (fired in initState post-frame) updates the
+    // DB and the realtime stream pushes is_read = true for these rows.
+    //
+    // Race-condition handling:
+    // - The realtime stream emits current DB state on subscribe (is_read = false).
+    // - The mark-as-read call fires AFTER the first frame (post-frame callback).
+    // - We snapshot _firstUnreadMessageId on the FIRST build where both
+    //   messages and currentUserId are available — this is guaranteed to
+    //   happen before the mark-as-read response arrives via realtime.
+    // - Once captured, the divider ID is never recomputed, so the divider
+    //   stays in the correct position even after messages are marked read.
+    if (_firstUnreadMessageId == null && messages.isNotEmpty) {
+      final uid = currentUserId;
+      if (uid.isNotEmpty) {
+        final firstUnread = messages.cast<ChatMessage?>().firstWhere(
+          (m) => m != null && m.senderId != uid && !m.isRead,
+          orElse: () => null,
+        );
+        _firstUnreadMessageId = firstUnread?.id;
+      }
+    }
+
     // Auto-scroll when new messages arrive.
     ref.listen(conversationMessagesStreamProvider(widget.conversationId),
         (_, _) {
@@ -142,10 +170,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                             msg.createdAt.toLocal().day !=
                                 messages[index - 1].createdAt.toLocal().day;
 
+                        // Show "UNREAD MESSAGES" divider above the first
+                        // message that was unread when the screen opened.
+                        final showUnreadDivider = _firstUnreadMessageId != null &&
+                            msg.id == _firstUnreadMessageId;
+
                         return _MessageBubble(
                           message: msg,
                           isOutgoing: isOutgoing,
                           showDateHeader: showDateHeader,
+                          showUnreadDivider: showUnreadDivider,
                         );
                       },
                     ),
@@ -320,11 +354,13 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isOutgoing,
     required this.showDateHeader,
+    this.showUnreadDivider = false,
   });
 
   final ChatMessage message;
   final bool isOutgoing;
   final bool showDateHeader;
+  final bool showUnreadDivider;
 
   @override
   Widget build(BuildContext context) {
@@ -351,6 +387,30 @@ class _MessageBubble extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // Unread messages divider
+        if (showUnreadDivider) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: Divider(color: colors.border.withValues(alpha: 0.5))),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  'UNREAD MESSAGES',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textMedium,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Expanded(child: Divider(color: colors.border.withValues(alpha: 0.5))),
+            ],
           ),
           const SizedBox(height: 8),
         ],

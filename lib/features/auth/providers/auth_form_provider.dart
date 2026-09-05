@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -286,4 +288,293 @@ class SignupNotifier extends StateNotifier<SignupState> {
 final signupNotifierProvider =
     StateNotifierProvider<SignupNotifier, SignupState>((ref) {
   return SignupNotifier(ref);
+});
+
+// ── Forgot Password (send reset code) ────────────────────────────────────────
+
+/// Immutable state for the "forgot password" email submission.
+class ForgotPasswordState {
+  const ForgotPasswordState({
+    this.isLoading = false,
+    this.error,
+    this.success = false,
+    this.message,
+  });
+
+  final bool isLoading;
+  final String? error;
+  final bool success;
+  final String? message;
+
+  ForgotPasswordState copyWith({
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    bool? success,
+    String? message,
+  }) {
+    return ForgotPasswordState(
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+      success: success ?? this.success,
+      message: message ?? this.message,
+    );
+  }
+}
+
+/// Handles sending the password-reset OTP email.
+class ForgotPasswordNotifier extends StateNotifier<ForgotPasswordState> {
+  ForgotPasswordNotifier(this._ref) : super(const ForgotPasswordState());
+
+  final Ref _ref;
+
+  Future<void> submit(String email) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    final result = await _ref.read(authServiceProvider).resetPassword(email);
+    if (!mounted) return;
+    state = ForgotPasswordState(
+      success: result.success,
+      message: result.message,
+      error: result.success ? null : result.message,
+    );
+  }
+
+  void clearError() {
+    if (state.error != null) state = state.copyWith(clearError: true);
+  }
+
+  /// Resets to initial state. Call when the screen is (re-)entered.
+  /// No-op if state is already at default — avoids firing unnecessary
+  /// state-change notifications during widget mount.
+  void reset() {
+    if (state == const ForgotPasswordState()) return;
+    state = const ForgotPasswordState();
+  }
+}
+
+final forgotPasswordNotifierProvider =
+    StateNotifierProvider<ForgotPasswordNotifier, ForgotPasswordState>((ref) {
+  return ForgotPasswordNotifier(ref);
+});
+
+// ── Verify Reset Code ────────────────────────────────────────────────────────
+
+/// Immutable state for the OTP verification step.
+class VerifyResetCodeState {
+  const VerifyResetCodeState({
+    this.isLoading = false,
+    this.error,
+    this.verified = false,
+    this.cooldownSeconds = 0,
+    this.resendMessage,
+  });
+
+  final bool isLoading;
+  final String? error;
+  final bool verified;
+  final int cooldownSeconds;
+  final String? resendMessage;
+
+  VerifyResetCodeState copyWith({
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    bool? verified,
+    int? cooldownSeconds,
+    String? resendMessage,
+  }) {
+    return VerifyResetCodeState(
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+      verified: verified ?? this.verified,
+      cooldownSeconds: cooldownSeconds ?? this.cooldownSeconds,
+      resendMessage: resendMessage ?? this.resendMessage,
+    );
+  }
+}
+
+/// Handles OTP verification and resend with cooldown.
+class VerifyResetCodeNotifier extends StateNotifier<VerifyResetCodeState> {
+  VerifyResetCodeNotifier(this._ref) : super(const VerifyResetCodeState());
+
+  final Ref _ref;
+  Timer? _cooldownTimer;
+  static const int _cooldownDuration = 30;
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  void startCooldown() {
+    _cooldownTimer?.cancel();
+    int remaining = _cooldownDuration;
+    state = state.copyWith(cooldownSeconds: remaining);
+    _cooldownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        remaining--;
+        if (remaining <= 0) {
+          _cooldownTimer?.cancel();
+          if (mounted) state = state.copyWith(cooldownSeconds: 0);
+        } else if (mounted) {
+          state = state.copyWith(cooldownSeconds: remaining);
+        }
+      },
+    );
+  }
+
+  Future<void> verify(String email, String code) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _ref
+          .read(authServiceProvider)
+          .verifyRecoveryOtp(email, code);
+      if (!mounted) return;
+      state = state.copyWith(isLoading: false, verified: true);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      String message;
+      if (e.message.toLowerCase().contains('expired')) {
+        message = 'This code has expired. Please request a new one.';
+      } else if (e.message.toLowerCase().contains('invalid') ||
+          e.message.toLowerCase().contains('incorrect')) {
+        message = 'Invalid code. Please try again.';
+      } else {
+        message = e.message;
+      }
+      state = state.copyWith(isLoading: false, error: message);
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Something went wrong. Please try again.',
+      );
+    }
+  }
+
+  Future<void> resend(String email) async {
+    if (state.cooldownSeconds > 0) return;
+    final result = await _ref.read(authServiceProvider).resetPassword(email);
+    if (!mounted) return;
+    if (result.success) {
+      startCooldown();
+      state = state.copyWith(
+        resendMessage: 'A new code has been sent to your email.',
+        clearError: true,
+      );
+    } else {
+      state = state.copyWith(error: result.message);
+    }
+  }
+
+  void clearError() {
+    if (state.error != null) state = state.copyWith(clearError: true);
+  }
+
+  /// Resets to initial state and cancels the cooldown timer.
+  /// Call when the screen is (re-)entered.
+  /// No-op if state is already at default — avoids firing unnecessary
+  /// state-change notifications during widget mount.
+  void reset() {
+    _cooldownTimer?.cancel();
+    if (state == const VerifyResetCodeState()) return;
+    state = const VerifyResetCodeState();
+  }
+}
+
+final verifyResetCodeNotifierProvider =
+    StateNotifierProvider<VerifyResetCodeNotifier, VerifyResetCodeState>((ref) {
+  return VerifyResetCodeNotifier(ref);
+});
+
+// ── Reset Password (set new password) ────────────────────────────────────────
+
+/// Immutable state for the new-password submission.
+class ResetPasswordState {
+  const ResetPasswordState({
+    this.isLoading = false,
+    this.error,
+    this.done = false,
+  });
+
+  final bool isLoading;
+  final String? error;
+  final bool done;
+
+  ResetPasswordState copyWith({
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    bool? done,
+  }) {
+    return ResetPasswordState(
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+      done: done ?? this.done,
+    );
+  }
+}
+
+/// Handles updating the password and signing out for clean re-login.
+class ResetPasswordNotifier extends StateNotifier<ResetPasswordState> {
+  ResetPasswordNotifier(this._ref) : super(const ResetPasswordState());
+
+  final Ref _ref;
+
+  Future<void> submit(String newPassword) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _ref.read(authServiceProvider).updatePassword(newPassword);
+      await _ref.read(authServiceProvider).signOut();
+      if (!mounted) return;
+      state = state.copyWith(isLoading: false, done: true);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      String message;
+      final lower = e.message.toLowerCase();
+      if (lower.contains('password') && lower.contains('weak')) {
+        message =
+            'Password is too weak. Please choose a stronger password (at least 6 characters).';
+      } else if (lower.contains('expired') || lower.contains('invalid')) {
+        message = 'This reset session has expired. Please request a new code.';
+      } else {
+        message = e.message;
+      }
+      state = state.copyWith(isLoading: false, error: message);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('password') && msg.contains('weak')) {
+        state = state.copyWith(
+          isLoading: false,
+          error:
+              'Password is too weak. Please choose a stronger password (at least 6 characters).',
+        );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Something went wrong. Please try again.',
+        );
+      }
+    }
+  }
+
+  void clearError() {
+    if (state.error != null) state = state.copyWith(clearError: true);
+  }
+
+  /// Resets to initial state. Call when the screen is (re-)entered.
+  /// No-op if state is already at default — avoids firing unnecessary
+  /// state-change notifications during widget mount.
+  void reset() {
+    if (state == const ResetPasswordState()) return;
+    state = const ResetPasswordState();
+  }
+}
+
+final resetPasswordNotifierProvider =
+    StateNotifierProvider<ResetPasswordNotifier, ResetPasswordState>((ref) {
+  return ResetPasswordNotifier(ref);
 });

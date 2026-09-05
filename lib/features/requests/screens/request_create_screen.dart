@@ -20,8 +20,7 @@ import '../providers/request_detail_provider.dart';
 ///
 /// Reached via the UrgentButton on the seeker home screen or the Edit button
 /// on the Request Detail screen.
-/// Fields: blood type, urgency, reason, city, hospital, units, notes,
-/// contact pref.
+/// Fields: blood type, urgency, reason, city, hospital, units, notes.
 /// On submit: shows success state with "View Request" button.
 class RequestCreateScreen extends ConsumerStatefulWidget {
   const RequestCreateScreen({
@@ -138,6 +137,17 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                     _ErrorBanner(message: formState.serverError!),
                   if (formState.serverError != null)
                     const SizedBox(height: 16),
+
+                  // ── Donation type ──────────────────────────────────
+                  const _SectionLabel(label: 'Donation Type', required: true),
+                  const SizedBox(height: 12),
+                  _DonationTypeSelector(
+                    selected: formState.donationType,
+                    onChanged: (type) => ref
+                        .read(requestCreateProvider.notifier)
+                        .setDonationType(type),
+                  ),
+                  const SizedBox(height: 24),
 
                   // ── Blood type (required) ────────────────────────
                   const _SectionLabel(label: 'Blood Type Needed', required: true),
@@ -328,18 +338,6 @@ class _RequestCreateScreenState extends ConsumerState<RequestCreateScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // ── Contact preference ───────────────────────────
-                  const _SectionLabel(label: 'Contact Preference'),
-                  const SizedBox(height: 12),
-                  _ContactPreferenceToggle(
-                    allowPhoneCall: formState.allowPhoneCall,
-                    onChanged: (v) => ref
-                        .read(requestCreateProvider.notifier)
-                        .setAllowPhoneCall(v),
-                  ),
-                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -1196,127 +1194,103 @@ class _StepperButton extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Contact preference toggle
+// Success view
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _ContactPreferenceToggle extends StatelessWidget {
-  const _ContactPreferenceToggle({
-    required this.allowPhoneCall,
+// ═══════════════════════════════════════════════════════════════════════════════
+// Donation type selector (Blood / Platelets segmented control)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _DonationTypeSelector extends StatelessWidget {
+  const _DonationTypeSelector({
+    required this.selected,
     required this.onChanged,
   });
 
-  final bool allowPhoneCall;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _ContactOption(
-          icon: Icons.chat_bubble_outline,
-          label: 'In-app chat only',
-          subtitle: 'Safest — donors message you within the app',
-          isSelected: !allowPhoneCall,
-          onTap: () => onChanged(false),
-        ),
-        const SizedBox(height: 10),
-        _ContactOption(
-          icon: Icons.phone_outlined,
-          label: 'Allow phone call',
-          subtitle: 'Verified donors can call your registered number',
-          isSelected: allowPhoneCall,
-          onTap: () => onChanged(true),
-        ),
-      ],
-    );
-  }
-}
-
-class _ContactOption extends StatelessWidget {
-  const _ContactOption({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final bool isSelected;
-  final VoidCallback onTap;
+  final String selected;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: colors.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? colors.primary : colors.border,
-            width: isSelected ? 2 : 1,
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border, width: 1),
+      ),
+      child: Row(
+        children: [
+          _DonationTypeOption(
+            icon: PhosphorIconsRegular.drop,
+            label: 'Blood',
+            isActive: selected == 'blood',
+            activeColor: colors.primary,
+            onTap: () => onChanged('blood'),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? colors.primaryContainer
-                    : colors.surface,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
+          _DonationTypeOption(
+            icon: PhosphorIconsRegular.testTube,
+            label: 'Platelets',
+            isActive: selected == 'platelet',
+            activeColor: colors.secondary,
+            onTap: () => onChanged('platelet'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DonationTypeOption extends StatelessWidget {
+  const _DonationTypeOption({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.activeColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final Color activeColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isActive ? activeColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              PhosphorIcon(
                 icon,
-                size: 20,
-                color: isSelected ? colors.primary : colors.textMedium,
+                size: 16,
+                color: isActive ? Colors.white : context.colors.textMedium,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: context.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: context.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            // Radio indicator
-            Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? colors.primary : colors.border,
-                  width: 2,
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isActive ? Colors.white : context.colors.textMedium,
                 ),
-                color: isSelected ? colors.primary : Colors.transparent,
               ),
-              child: isSelected
-                  ? const Icon(Icons.check, size: 14, color: Colors.white)
-                  : null,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
