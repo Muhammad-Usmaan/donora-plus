@@ -1,20 +1,20 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../../core/config/env_config.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chatbot_service.dart';
 
-/// Concrete chatbot implementation backed by Alibaba Cloud's Qwen model.
+/// Concrete chatbot implementation backed by the qwen-chat Edge Function.
+///
+/// The Edge Function acts as a server-side proxy to Alibaba Cloud's Qwen API,
+/// so the API key never leaves the server. The client sends the same
+/// OpenAI-compatible payload shape; the Edge Function injects the API key
+/// and forwards to Qwen, then returns the response unchanged.
 ///
 /// Builds a dynamic system prompt that includes the Donora+ app context,
 /// the current user's profile summary, and strict brevity instructions.
 class QwenChatbotService implements ChatbotService {
-  QwenChatbotService({http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+  QwenChatbotService(this._supabase);
 
-  final http.Client _http;
-
-  static const String _apiEndpoint =
-      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+  final SupabaseClient _supabase;
 
   // ── Static app-context block (shared across all users) ──────────────────
   static const String _appContext = '''
@@ -87,10 +87,6 @@ RESPONSE STYLE — follow strictly:
     List<Map<String, String>>? conversationHistory,
     String? userContext,
   }) async {
-    if (EnvConfig.qwenApiKey.isEmpty) {
-      throw ChatbotApiKeyException();
-    }
-
     final messages = <Map<String, String>>[
       {
         'role': 'system',
@@ -100,36 +96,26 @@ RESPONSE STYLE — follow strictly:
       {'role': 'user', 'content': message},
     ];
 
-    final response = await _http.post(
-      Uri.parse(_apiEndpoint),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${EnvConfig.qwenApiKey}',
-      },
-      body: jsonEncode({
+    final response = await _supabase.functions.invoke(
+      'qwen-chat',
+      body: {
         'model': 'qwen-plus',
         'messages': messages,
         'temperature': 0.7,
         'max_tokens': 256,
-      }),
+      },
     );
 
-    if (response.statusCode != 200) {
-      throw Exception(
-          'Chatbot API error: ${response.statusCode} ${response.body}');
+    final data = response.data;
+    if (data == null) {
+      throw Exception('Chatbot returned no response');
     }
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final choices = data['choices'] as List<dynamic>;
+    final parsed = data is String ? jsonDecode(data) as Map<String, dynamic> : data as Map<String, dynamic>;
+    final choices = parsed['choices'] as List<dynamic>;
     final botMessage = (choices.first as Map<String, dynamic>)['message']
         as Map<String, dynamic>;
     return botMessage['content'] as String;
   }
 }
 
-/// Thrown when the QWEN_API_KEY is not configured.
-class ChatbotApiKeyException implements Exception {
-  @override
-  String toString() =>
-      'Chatbot is not configured. Please set QWEN_API_KEY in your environment.';
-}

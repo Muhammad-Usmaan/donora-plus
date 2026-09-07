@@ -52,3 +52,6 @@ app.*.map.json
 # Code generation output
 *.g.dart
 *.freezed.dart
+
+# Supabase CLI cache (contains pooler URLs, project refs — not source code)
+supabase/.temp/

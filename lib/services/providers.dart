@@ -8,7 +8,7 @@ import 'supabase/supabase_client_provider.dart';
 
 /// Provides the abstract ChatbotService (Qwen implementation).
 final chatbotServiceProvider = Provider<ChatbotService>((ref) {
-  return QwenChatbotService();
+  return QwenChatbotService(ref.watch(supabaseClientProvider));
 });
 
 /// Provides the FCM push-notification service.

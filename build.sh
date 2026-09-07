@@ -2,7 +2,7 @@
 # ──────────────────────────────────────────────────────────────
 # Donora+ — Release build helper
 # Ensures --dart-define-from-file=.env is always included so that
-# SUPABASE_URL, SUPABASE_ANON_KEY, and QWEN_API_KEY are baked in.
+# SUPABASE_URL and SUPABASE_ANON_KEY are baked in.
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
 

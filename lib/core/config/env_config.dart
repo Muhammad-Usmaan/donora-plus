@@ -30,12 +30,6 @@ class EnvConfig {
     defaultValue: '',
   );
 
-  /// Alibaba Cloud / Qwen API key for the chatbot service
-  static const String qwenApiKey = String.fromEnvironment(
-    'QWEN_API_KEY',
-    defaultValue: '',
-  );
-
   /// Custom URL scheme used for deep links (password reset, etc.).
   ///
   /// Must match the scheme registered in:

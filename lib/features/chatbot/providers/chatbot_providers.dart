@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/auth_providers.dart';
 import '../../../services/chatbot/chatbot_service.dart';
-import '../../../services/chatbot/qwen_chatbot_service.dart';
 import '../../../services/providers.dart';
 import '../../../services/supabase/supabase_client_provider.dart';
 import '../../home/providers/home_providers.dart';
@@ -421,13 +420,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
         } catch (_) {}
       }
     } catch (e) {
-      String errorMessage;
-      if (e is ChatbotApiKeyException) {
-        errorMessage =
-            'AI chatbot is not configured yet. Please add QWEN_API_KEY to your .env file.';
-      } else {
-        errorMessage = 'Something went wrong. Please try again.';
-      }
+      const errorMessage = 'Something went wrong. Please try again.';
       state = state.copyWith(
         isAwaitingResponse: false,
         error: errorMessage,
