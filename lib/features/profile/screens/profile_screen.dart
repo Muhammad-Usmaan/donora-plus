@@ -127,6 +127,13 @@ class _ProfileBody extends ConsumerWidget {
                   onTap: () => context.pushNamed(
                       RouteNames.profileDonorSettings),
                 ),
+                const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.emoji_events_outlined,
+                  label: 'Achievements',
+                  onTap: () => context.pushNamed(
+                      RouteNames.profileAchievements),
+                ),
               ],
               const Divider(height: 1),
               _SettingsRow(

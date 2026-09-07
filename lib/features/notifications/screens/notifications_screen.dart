@@ -288,6 +288,14 @@ class _NotificationCard extends ConsumerWidget {
       case NotificationType.topDonor:
         context.pushNamed(RouteNames.profile);
         break;
+      case NotificationType.achievementUnlocked:
+        if (linkId != null) {
+          context.pushNamed(
+            RouteNames.achievementCelebration,
+            pathParameters: {'id': linkId},
+          );
+        }
+        break;
       case NotificationType.generic:
         // No navigation for generic notifications.
         break;
@@ -338,6 +346,11 @@ class _NotificationIcon extends StatelessWidget {
         bgColor = const Color(0xFFFFF8E1);
         iconColor = const Color(0xFFF9A825);
         icon = Icons.emoji_events;
+        break;
+      case NotificationType.achievementUnlocked:
+        bgColor = const Color(0xFFFFF8E1);
+        iconColor = const Color(0xFFF9A825);
+        icon = Icons.celebration_outlined;
         break;
       case NotificationType.generic:
         bgColor = colors.primaryContainer;

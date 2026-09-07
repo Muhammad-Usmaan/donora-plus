@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../core/constants/request_reasons.dart';
 import '../../../core/router/route_names.dart';
@@ -14,6 +15,7 @@ import '../../../core/widgets/secondary_button.dart';
 import '../../../core/widgets/donation_type_badge.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../../features/chatbot/widgets/ask_donora_ai_card.dart';
+import '../../../features/profile/providers/profile_providers.dart';
 import 'donation_type_tabs.dart';
 import '../../../features/chat/providers/chat_providers.dart';
 import '../../../features/requests/providers/request_detail_provider.dart';
@@ -42,7 +44,17 @@ class DonorHomeView extends ConsumerWidget {
 
           // ── Ask Donora AI ─────────────────────────────────────────
           const AskDonoraAiCard(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
+
+          // ── Compact eligibility banner (donor only) ───────────────────
+          profileAsync.whenOrNull(
+                data: (profile) =>
+                    profile.activeRole == 'donor'
+                        ? const _EligibilityBanner()
+                        : const SizedBox.shrink(),
+              ) ??
+              const SizedBox.shrink(),
+          const SizedBox(height: 12),
 
           // ── Blood / Platelets filter ────────────────────────────────
           const DonationTypeTabs(),
@@ -676,5 +688,190 @@ class _DonorExpiryLabel extends StatelessWidget {
     }
 
     return const SizedBox.shrink();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Compact eligibility banner (donor home, between AI card and type tabs)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _EligibilityBanner extends ConsumerWidget {
+  const _EligibilityBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eligibilityAsync = ref.watch(donationEligibilityProvider);
+
+    return eligibilityAsync.when(
+      data: (eligibility) {
+        if (eligibility == null) {
+          // Never donated — no banner needed on the home screen.
+          return const SizedBox.shrink();
+        }
+        return _buildBanner(context, eligibility);
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildBanner(BuildContext context, DonationEligibility eligibility) {
+    final colors = context.colors;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final wbDate = eligibility.nextWholeBloodDate;
+    final pltDate = eligibility.nextPlateletDate;
+
+    final wbEligible = wbDate == null ||
+        !DateTime(wbDate.year, wbDate.month, wbDate.day).isAfter(today);
+    final pltEligible = pltDate == null ||
+        !DateTime(pltDate.year, pltDate.month, pltDate.day).isAfter(today);
+
+    // Both eligible — show a single positive line.
+    if (wbEligible && pltEligible) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: colors.success.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              PhosphorIcon(
+                PhosphorIconsRegular.checkCircle,
+                size: 16,
+                color: colors.success,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Eligible for blood & platelet donation',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: colors.success,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // At least one type is cooling down — show per-type status.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: colors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colors.border),
+        ),
+        child: Row(
+          children: [
+            _buildTypeStatus(
+              context,
+              label: 'Blood',
+              isEligible: wbEligible,
+              nextDate: wbDate,
+              typeColor: colors.primary,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                '\u00b7',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textMedium.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+            _buildTypeStatus(
+              context,
+              label: 'Platelets',
+              isEligible: pltEligible,
+              nextDate: pltDate,
+              typeColor: colors.secondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeStatus(
+    BuildContext context, {
+    required String label,
+    required bool isEligible,
+    required DateTime? nextDate,
+    required Color typeColor,
+  }) {
+    final colors = context.colors;
+
+    String statusText;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (isEligible) {
+      statusText = 'Eligible';
+      statusColor = colors.success;
+      statusIcon = PhosphorIconsRegular.checkCircle;
+    } else {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final target = DateTime(nextDate!.year, nextDate.month, nextDate.day);
+      final days = target.difference(today).inDays;
+      statusText = days == 0
+          ? 'Today'
+          : days == 1
+              ? '1 day'
+              : '$days days';
+      statusColor = colors.warning;
+      statusIcon = PhosphorIconsRegular.clock;
+    }
+
+    return Expanded(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: typeColor,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '$label: ',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: colors.textMedium,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          PhosphorIcon(statusIcon, size: 14, color: statusColor),
+          const SizedBox(width: 3),
+          Text(
+            statusText,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: statusColor,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

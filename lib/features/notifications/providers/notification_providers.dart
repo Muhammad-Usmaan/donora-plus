@@ -16,6 +16,7 @@ enum NotificationType {
   verificationApproved,
   newMessage,
   topDonor,
+  achievementUnlocked,
   generic;
 
   factory NotificationType.fromString(String? value) {
@@ -36,6 +37,8 @@ enum NotificationType {
         return NotificationType.newMessage;
       case 'top_donor':
         return NotificationType.topDonor;
+      case 'achievement_unlocked':
+        return NotificationType.achievementUnlocked;
       default:
         return NotificationType.generic;
     }

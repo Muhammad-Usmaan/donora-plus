@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/blood_type_chip.dart';
+import '../../../core/widgets/donation_type_badge.dart';
 import '../../home/providers/home_providers.dart';
 import '../providers/profile_providers.dart';
+
+import '../widgets/profile_dialogs.dart';
 
 /// Donation overview sub-page: stats card + schedule card.
 class DonationOverviewScreen extends ConsumerWidget {
@@ -33,12 +38,16 @@ class DonationOverviewScreen extends ConsumerWidget {
             // Donation Stats Card
             _DonationStatsCard(
               profile: profile,
-              onGoalTap: () => _showGoalEditSheet(context, ref, profile),
+              onGoalTap: () => showGoalEditSheet(
+                context,
+                ref: ref,
+                currentGoal: profile.donationGoal,
+              ),
             ),
             const SizedBox(height: 16),
 
-            // Schedule Card
-            const _ScheduleCard(),
+            // Eligibility Card
+            const _EligibilityCard(),
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -52,121 +61,6 @@ class DonationOverviewScreen extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-
-  void _showGoalEditSheet(
-    BuildContext context,
-    WidgetRef ref,
-    UserProfile profile,
-  ) {
-    final colors = context.colors;
-    final controller = TextEditingController(
-      text: profile.donationGoal?.toString() ?? '',
-    );
-
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: colors.border,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Set Donation Goal',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textHigh,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'How many donations would you like to reach?',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colors.textMedium,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.number,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. 15',
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final text = controller.text.trim();
-                          if (text.isEmpty) {
-                            Navigator.of(ctx).pop();
-                            return;
-                          }
-                          final goal = int.tryParse(text);
-                          if (goal == null || goal <= 0) {
-                            context.showSnackBar(
-                              'Enter a positive number',
-                              isError: true,
-                            );
-                            return;
-                          }
-                          Navigator.of(ctx).pop();
-                          try {
-                            await ref.read(updateProfileFieldProvider)(
-                                {'donation_goal': goal});
-                            if (context.mounted) {
-                              context.showSnackBar(
-                                  'Donation goal updated to $goal');
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              context.showSnackBar(
-                                  'Update failed: $e', isError: true);
-                            }
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.primary,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Save Goal'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
@@ -240,16 +134,12 @@ class _DonationStatsCard extends ConsumerWidget {
                 children: [
                   Text(
                     'Last Donation',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.textMedium,
-                    ),
+                    style: TextStyle(fontSize: 12, color: colors.textMedium),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     profile.mostRecentDonationDate != null
-                        ? Formatters.dateShort(
-                            profile.mostRecentDonationDate!)
+                        ? Formatters.dateShort(profile.mostRecentDonationDate!)
                         : '\u2014',
                     style: TextStyle(
                       fontSize: 14,
@@ -260,17 +150,15 @@ class _DonationStatsCard extends ConsumerWidget {
                   const SizedBox(height: 12),
                   Text(
                     'Appreciation',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: colors.textMedium,
-                    ),
+                    style: TextStyle(fontSize: 12, color: colors.textMedium),
                   ),
                   const SizedBox(height: 4),
                   statsAsync.when(
                     data: (stats) {
                       final appreciated = stats?['appreciated_count'] ?? 0;
                       final totalFeedback = stats?['total_feedback_count'] ?? 0;
-                      final avgRating = stats?['average_star_rating'] as double?;
+                      final avgRating =
+                          stats?['average_star_rating'] as double?;
                       // Zero-feedback state: show "No feedback yet" instead of "0/0".
                       if (totalFeedback == 0) {
                         return Text(
@@ -282,25 +170,32 @@ class _DonationStatsCard extends ConsumerWidget {
                           ),
                         );
                       }
-                      return Row(
+                      return Column(
                         children: [
-                          Icon(Icons.star, size: 14, color: colors.warning),
-                          const SizedBox(width: 4),
-                          Text(
-                            avgRating?.toStringAsFixed(1) ?? '—',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textHigh,
-                            ),
+                          Row(
+                            children: [
+                              Icon(Icons.star, size: 14, color: colors.warning),
+                              const SizedBox(width: 4),
+                              Text(
+                                avgRating?.toStringAsFixed(1) ?? '—',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.textHigh,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$appreciated/$totalFeedback appreciated',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.textMedium,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                '$appreciated/$totalFeedback appreciated',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: colors.textMedium,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       );
@@ -315,10 +210,7 @@ class _DonationStatsCard extends ConsumerWidget {
                     ),
                     error: (_, __) => Text(
                       '\u2014',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: colors.textMedium,
-                      ),
+                      style: TextStyle(fontSize: 14, color: colors.textMedium),
                     ),
                   ),
                 ],
@@ -372,80 +264,132 @@ class _DonationStatsCard extends ConsumerWidget {
   }
 }
 
-// ── Schedule Card ────────────────────────────────────────────────────────────
+// ── Eligibility Card ─────────────────────────────────────────────────────────
 
-class _ScheduleCard extends ConsumerWidget {
-  const _ScheduleCard();
+class _EligibilityCard extends ConsumerWidget {
+  const _EligibilityCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
-    final dateAsync = ref.watch(nextDonationEligibleDateProvider);
+    final eligibilityAsync = ref.watch(donationEligibilityProvider);
 
     return AppCard(
-      onTap: () {},
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.calendar_today,
-              size: 22,
-              color: colors.primary,
+          Text(
+            'Donation Eligibility',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colors.textMedium,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(height: 12),
+          eligibilityAsync.when(
+            data: (eligibility) {
+              if (eligibility == null) {
+                // Never donated either type.
+                return _buildNeverDonatedRow(colors);
+              }
+              return Column(
+                children: [
+                  _buildTypeRow(
+                    context: context,
+                    donationType: 'blood',
+                    nextDate: eligibility.nextWholeBloodDate,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Divider(height: 1, color: colors.border),
+                  ),
+                  _buildTypeRow(
+                    context: context,
+                    donationType: 'platelet',
+                    nextDate: eligibility.nextPlateletDate,
+                  ),
+                ],
+              );
+            },
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+            error: (_, __) => Text(
+              '\u2014',
+              style: TextStyle(fontSize: 14, color: colors.textMedium),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNeverDonatedRow(AppColors colors) {
+    return Row(
+      children: [
+        Icon(Icons.info_outline, size: 18, color: colors.textMedium),
+        const SizedBox(width: 10),
+        Text(
+          'No donation history',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: colors.textMedium,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTypeRow({
+    required BuildContext context,
+    required String donationType,
+    required DateTime? nextDate,
+  }) {
+    final colors = context.colors;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isEligible = nextDate == null ||
+        !DateTime(nextDate.year, nextDate.month, nextDate.day)
+            .isAfter(today);
+
+    final statusColor = isEligible ? colors.success : colors.warning;
+    final statusIcon =
+        isEligible ? PhosphorIconsRegular.checkCircle : PhosphorIconsRegular.clock;
+    final statusLabel = isEligible
+        ? 'Eligible now'
+        : '${Formatters.dateShort(nextDate)} \u00b7 ${Formatters.relativeDate(nextDate)}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: DonationTypeBadge(
+              donationType: donationType,
+              compact: true,
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  'Next donation schedule',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: colors.textMedium,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                dateAsync.when(
-                  data: (date) {
-                    if (date == null) {
-                      return Text(
-                        'Not yet scheduled',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: colors.textHigh,
-                        ),
-                      );
-                    }
-                    return Text(
-                      '${Formatters.dateShort(date)} \u00b7 ${Formatters.relativeDate(date)}',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textHigh,
-                      ),
-                    );
-                  },
-                  loading: () => Text(
-                    'Loading\u2026',
+                PhosphorIcon(statusIcon, size: 16, color: statusColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    statusLabel,
                     style: TextStyle(
-                      fontSize: 15,
-                      color: colors.textMedium,
-                    ),
-                  ),
-                  error: (_, __) => Text(
-                    '\u2014',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: colors.textMedium,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
                     ),
                   ),
                 ),

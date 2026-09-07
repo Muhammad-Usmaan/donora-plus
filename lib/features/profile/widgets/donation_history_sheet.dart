@@ -158,9 +158,9 @@ class _DonationSummaryStrip extends ConsumerWidget {
             child: _SummaryStat(
               icon: Icons.event_available,
               iconColor: colors.secondary,
-              value: profile.lastDonationDate != null
-                  ? Formatters.dateShort(profile.lastDonationDate!)
-                  : '—',
+              value: profile.mostRecentDonationDate != null
+                  ? Formatters.dateShort(profile.mostRecentDonationDate!)
+                  : '\u2014',
               label: 'Last donation',
             ),
           ),

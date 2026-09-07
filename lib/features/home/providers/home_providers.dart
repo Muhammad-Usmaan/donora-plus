@@ -50,6 +50,7 @@ class UserProfile {
     this.dateOfBirth,
     this.lastDonationDate,
     this.lastPlateletDonationDate,
+    this.canDonatePlatelets = false,
     this.profilePhotoUrl,
     this.totalDonations = 0,
     this.donationGoal,
@@ -73,6 +74,7 @@ class UserProfile {
   final DateTime? dateOfBirth;
   final DateTime? lastDonationDate;
   final DateTime? lastPlateletDonationDate;
+  final bool canDonatePlatelets;
   final String? profilePhotoUrl;
   final int totalDonations;
   final int? donationGoal;
@@ -102,6 +104,9 @@ class UserProfile {
     lastPlateletDonationDate: map['last_platelet_donation_date'] != null
         ? DateTime.tryParse(map['last_platelet_donation_date'] as String)?.toUtc()
         : null,
+    canDonatePlatelets: map['can_donate_platelets'] is bool
+        ? map['can_donate_platelets'] as bool
+        : false,
     profilePhotoUrl: map['profile_photo_url'] as String?,
     totalDonations: map['total_donations'] as int? ?? 0,
     donationGoal: map['donation_goal'] as int?,

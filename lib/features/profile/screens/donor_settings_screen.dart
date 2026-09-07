@@ -66,6 +66,12 @@ class DonorSettingsScreen extends ConsumerWidget {
                   ),
                   const Divider(height: 1),
 
+                  // Platelet donation eligibility toggle
+                  _PlateletEligibilityRow(
+                    enabled: profile.canDonatePlatelets,
+                  ),
+                  const Divider(height: 1),
+
                   // Hemoglobin Level
                   _SettingsRow(
                     icon: Icons.bloodtype,
@@ -382,6 +388,93 @@ class _ToggleOption extends StatelessWidget {
             color: selected ? Colors.white : colors.textMedium,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Platelet eligibility toggle ───────────────────────────────────────────────
+
+class _PlateletEligibilityRow extends ConsumerStatefulWidget {
+  const _PlateletEligibilityRow({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  ConsumerState<_PlateletEligibilityRow> createState() =>
+      _PlateletEligibilityRowState();
+}
+
+class _PlateletEligibilityRowState
+    extends ConsumerState<_PlateletEligibilityRow> {
+  bool _isUpdating = false;
+
+  Future<void> _onChanged(bool value) async {
+    if (_isUpdating) return;
+    setState(() => _isUpdating = true);
+    try {
+      await ref.read(updateProfileFieldProvider)(
+          {'can_donate_platelets': value});
+      if (mounted) {
+        context.showSnackBar(
+          value
+              ? 'Platelet donation eligibility enabled.'
+              : 'Platelet donation eligibility disabled.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showSnackBar('Could not update eligibility: $e',
+            isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.science_outlined, size: 22, color: colors.textMedium),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Platelet Donation Eligible',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: colors.textHigh,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Platelet donation requires apheresis-capable '
+                  'centers \u2014 only enable if you\'re able to donate '
+                  'this way.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: colors.textMedium,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: widget.enabled,
+            activeThumbColor: colors.primary,
+            onChanged: _isUpdating ? null : _onChanged,
+          ),
+        ],
       ),
     );
   }

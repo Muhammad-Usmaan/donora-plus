@@ -40,6 +40,10 @@ class RouteNames {
   static const String profileDonorSettings = 'profile-donor-settings';
   static const String profileAccount = 'profile-account';
   static const String profilePreferences = 'profile-preferences';
+  static const String profileAchievements = 'profile-achievements';
+
+  // ── Achievements ──────────────────────────────────────────────────
+  static const String achievementCelebration = 'achievement-celebration';
 }
 
 /// Route path segments (used inside GoRoute definitions).
@@ -74,4 +78,8 @@ class RoutePaths {
   static const String profileDonorSettings = '/profile/donor-settings';
   static const String profileAccount = '/profile/account';
   static const String profilePreferences = '/profile/preferences';
+  static const String profileAchievements = '/profile/achievements';
+
+  // ── Achievements ──────────────────────────────────────────────────
+  static const String achievementCelebration = '/achievement-celebration/:id';
 }

@@ -37,6 +37,7 @@ dependencies:
 
   # Media
   image_picker: ^1.1.2
+  share_plus: ^10.1.4
 
   # Network
   http: ^1.4.0
@@ -78,3 +79,4 @@ flutter:
   assets:
     - assets/images/onboarding/
     - assets/images/logo/
+    - assets/images/achievements/

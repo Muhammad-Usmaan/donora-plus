@@ -35,6 +35,7 @@ class DonorProfile {
     this.appreciatedCount = 0,
     this.totalFeedbackCount = 0,
     this.averageStarRating,
+    this.highestMilestone = 0,
   });
 
   final String id;
@@ -77,6 +78,10 @@ class DonorProfile {
   // Mean of star_rating across all feedback rows (from profiles_public).
   // Null when no feedback has been received.
   final double? averageStarRating;
+
+  // Highest milestone tier reached (from profiles_public).
+  // Zero when no milestone achievements have been earned.
+  final int highestMilestone;
 
   /// Whether this donor can plausibly donate right now: they must be in
   /// donor mode, and — when their last donation date is public — at least
@@ -125,6 +130,7 @@ class DonorProfile {
         appreciatedCount: map['appreciated_count'] as int? ?? 0,
         totalFeedbackCount: map['total_feedback_count'] as int? ?? 0,
         averageStarRating: (map['average_star_rating'] as num?)?.toDouble(),
+        highestMilestone: map['highest_milestone'] as int? ?? 0,
       );
 }
 

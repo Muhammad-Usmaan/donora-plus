@@ -144,6 +144,8 @@ bool _categoryEnabled(RemoteMessage message, NotificationSettings settings) {
       return settings.verificationUpdates;
     case 'top_donor':
       return settings.topDonorUpdates;
+    case 'achievement_unlocked':
+      return true; // achievements category (no dedicated toggle in settings yet)
     default:
       return true;
   }
@@ -195,6 +197,15 @@ void _deepLink(Ref ref, RemoteMessage message) {
     case 'verification_approved':
     case 'top_donor':
       router.pushNamed(RouteNames.profile);
+    case 'achievement_unlocked':
+      if (linkId != null && linkId.isNotEmpty) {
+        router.pushNamed(
+          RouteNames.achievementCelebration,
+          pathParameters: {'id': linkId},
+        );
+      } else {
+        router.pushNamed(RouteNames.notifications);
+      }
     default:
       router.pushNamed(RouteNames.notifications);
   }

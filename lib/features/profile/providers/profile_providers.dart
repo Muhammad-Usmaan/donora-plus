@@ -328,11 +328,41 @@ final feedbackStatsProvider =
   };
 });
 
-// ── Next donation eligible date ─────────────────────────────────────────────
+// ── Donation eligibility (per-type next-eligible dates) ────────────────────
 
-/// Next date the current donor is eligible to donate (either type).
-/// Returns null if the donor has never donated.
-final nextDonationEligibleDateProvider = FutureProvider<DateTime?>((ref) async {
+/// Per-type next-eligible dates returned by the
+/// `get_next_donation_eligible_date` RPC (JSONB shape, migration 20260907).
+class DonationEligibility {
+  const DonationEligibility({
+    required this.nextWholeBloodDate,
+    required this.nextPlateletDate,
+  });
+
+  /// Next date the donor is eligible for whole blood.
+  /// Null when the donor has never donated either type, or when both
+  /// cooldowns have expired (immediately eligible).
+  final DateTime? nextWholeBloodDate;
+
+  /// Next date the donor is eligible for platelet donation.
+  final DateTime? nextPlateletDate;
+
+  factory DonationEligibility.fromMap(Map<String, dynamic> map) =>
+      DonationEligibility(
+        nextWholeBloodDate: map['next_whole_blood_date'] != null
+            ? DateTime.tryParse(map['next_whole_blood_date'] as String)
+            : null,
+        nextPlateletDate: map['next_platelet_date'] != null
+            ? DateTime.tryParse(map['next_platelet_date'] as String)
+            : null,
+      );
+}
+
+/// Next eligible dates per donation type for the current donor.
+///
+/// Returns null when the donor has never donated either type
+/// (both next_*_date fields are null from the RPC).
+final donationEligibilityProvider =
+    FutureProvider<DonationEligibility?>((ref) async {
   final user = ref.watch(currentUserProvider);
   if (user == null) return null;
 
@@ -343,5 +373,12 @@ final nextDonationEligibleDateProvider = FutureProvider<DateTime?>((ref) async {
   );
 
   if (result == null) return null;
-  return DateTime.tryParse(result as String);
+  final map = result as Map<String, dynamic>;
+  final eligibility = DonationEligibility.fromMap(map);
+  // Both null means the donor has never donated either type.
+  if (eligibility.nextWholeBloodDate == null &&
+      eligibility.nextPlateletDate == null) {
+    return null;
+  }
+  return eligibility;
 });

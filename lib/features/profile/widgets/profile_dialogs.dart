@@ -795,3 +795,131 @@ class _EditHemoglobinDialogState extends State<_EditHemoglobinDialog> {
     );
   }
 }
+
+// ── Edit donation goal (bottom sheet) ────────────────────────────────────────
+
+/// Shows the donation goal edit bottom sheet.
+///
+/// Reused by both the Donation Overview screen and the post-achievement
+/// goal nudge. Pre-fills with [currentGoal] if set; leave blank to clear.
+///
+/// [headerText] overrides the subtitle for contextual framing (e.g. the
+/// achievement nudge shows "Ready for your next goal?" instead of the
+/// default "How many donations would you like to reach?").
+Future<void> showGoalEditSheet(
+  BuildContext context, {
+  required WidgetRef ref,
+  required int? currentGoal,
+  String? headerText,
+}) {
+  final colors = context.colors;
+  final controller = TextEditingController(
+    text: currentGoal?.toString() ?? '',
+  );
+
+  return showModalBottomSheet<void>(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colors.border,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Set Donation Goal',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textHigh,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    headerText ??
+                        'How many donations would you like to reach?',
+                    style:
+                        TextStyle(fontSize: 13, color: colors.textMedium),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration:
+                        const InputDecoration(hintText: 'e.g. 15'),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final text = controller.text.trim();
+                        if (text.isEmpty) {
+                          Navigator.of(ctx).pop();
+                          return;
+                        }
+                        final goal = int.tryParse(text);
+                        if (goal == null || goal <= 0) {
+                          context.showSnackBar(
+                            'Enter a positive number',
+                            isError: true,
+                          );
+                          return;
+                        }
+                        Navigator.of(ctx).pop();
+                        try {
+                          await ref.read(updateProfileFieldProvider)({
+                            'donation_goal': goal,
+                          });
+                          if (context.mounted) {
+                            context.showSnackBar(
+                              'Donation goal updated to $goal',
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            context.showSnackBar(
+                              'Update failed: $e',
+                              isError: true,
+                            );
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colors.primary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Save Goal'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}

@@ -30,6 +30,8 @@ import '../../features/profile/screens/donation_overview_screen.dart';
 import '../../features/profile/screens/donor_settings_screen.dart';
 import '../../features/profile/screens/account_settings_screen.dart';
 import '../../features/profile/screens/preferences_screen.dart';
+import '../../features/achievements/screens/achievements_list_screen.dart';
+import '../../features/achievements/screens/achievement_celebration_screen.dart';
 import '../../features/requests/screens/location_picker_screen.dart';
 import '../widgets/main_shell.dart';
 
@@ -286,6 +288,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: RouteNames.profilePreferences,
         path: RoutePaths.profilePreferences,
         builder: (_, _) => const PreferencesScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.profileAchievements,
+        path: RoutePaths.profileAchievements,
+        builder: (_, _) => const AchievementsListScreen(),
+      ),
+
+      // ── Achievement celebration ─────────────────────────────────────
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        name: RouteNames.achievementCelebration,
+        path: RoutePaths.achievementCelebration,
+        builder: (_, state) => AchievementCelebrationScreen(
+          achievementId: state.pathParameters['id'] ?? '',
+        ),
       ),
     ],
     // ── Redirect guards ──────────────────────────────────────────────

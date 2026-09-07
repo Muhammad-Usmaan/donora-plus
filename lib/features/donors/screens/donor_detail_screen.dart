@@ -293,6 +293,8 @@ class _DonorDetailBodyState extends ConsumerState<_DonorDetailBody> {
             if (_donor.isVerified) const VerifiedBadge(),
             DonorStatusChip(classification: _donor.donorClassification),
             if (_donor.isTopDonor) const _TopDonorBadge(),
+            if (_donor.highestMilestone > 0)
+              _MilestoneBadge(count: _donor.highestMilestone),
           ],
         ),
 
@@ -890,6 +892,49 @@ class _TopDonorBadge extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               color: Color(0xFFB8860B),
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Milestone achievement badge ──────────────────────────────────────────────
+
+/// Small trust-signal badge showing the donor's highest milestone tier.
+/// Only rendered when the donor has at least one milestone achievement.
+class _MilestoneBadge extends StatelessWidget {
+  const _MilestoneBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: colors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colors.warning.withValues(alpha: 0.4),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.emoji_events_rounded, size: 14, color: colors.warning),
+          const SizedBox(width: 4),
+          Text(
+            '$count+ Donations',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: colors.warning,
               letterSpacing: 0.3,
             ),
           ),
